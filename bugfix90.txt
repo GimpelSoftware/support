@@ -1,0 +1,3028 @@
+
+*************** Version 9.00L  -- October 13, 2014 ***************
+
+*   Our implementation of 'nullptr' for C++11 erroneously treated it like a
+    pointer in certain contexts.
+    GSRN-DC-130220-1
+
+*   During the parse of a function parameter list, we previously did not
+    make names of function parameters visible to name lookup. This was a
+    a long-standing defect in both C and C++ modes. For example, the
+    following is well-formed C90:
+        struct S { int r[16]; };
+        void f( struct S *p, char(*)[sizeof(*p)]);
+
+*   During template parameter substitution, our model did not always treat
+    name lookup of template parameters correctly; that led to errors in a
+    case like the following (reduced from <boost/crc.hpp>):
+        typedef long unsigned int U;
+        template< U N > struct X { typedef short M; };
+        template < U Bits, typename X<Bits>::M Q > class A;
+        typedef A<16, 2> B; // Undeserved Error 40 here.
+            // 40: "undeclared identifier 'Bits'"
+
+*   With headers for certain embedded compilers that allow:
+
+            '@'   /constant-expression/
+
+    ... after a /declarator/ but before the optional /initializer/ in the
+    declaration of a variable, we would issue an unhelpful redefinition
+    error for this case:
+
+        t.h:
+                int x @ 0x100;
+        t1.cpp:
+                #include "t.h"
+        t2.cpp:
+                #include "t.h"
+
+    ... which elicits Error 14 ("'x' previously defined") in t2.cpp.
+
+    Without the '@' syntax, Error 14 would be justified because the lack
+    of 'extern' means that the compiler would allocate storage for the
+    same variable twice.  But these definitions of x are different: the
+    compiler does not allocate storage because of the address-specifier.
+    So for error-reporting purposes, this is equivalent to
+    __declspec(selectany), which we already support in the form of a
+    type-specifier flag.
+    GSRN-DC-121005-1
+
+*   Our treatment of unqualified name lookup was not quite right
+    in the case of:
+            'friend'    /elaborated-type-specifier/    ';'
+    ... but the defect only affected our behavior in Microsoft-emulation
+    mode.
+    Example:
+        // [run with -cmsc]
+        namespace N {
+        class A {
+          friend class N;
+          bool b;
+        };
+        class N {
+          A m;
+          void f();
+        };
+          void N::f() {
+            m.b = true; // 9.00k: Undeserved Error 1060 here
+                        // private member 'N::A::b' is not accessible to non-member
+                        // non-friend functions
+          }
+        } // end namespace N
+    GSRN-LO-130421-1
+
+*   In a default argument in a /template-parameter/, we erroneously
+    perceived the right-angle bracket of a cast expression as the end of
+    the /template-parameter-list/; example:
+        template <int d = static_cast<int>(~0)>
+                                      //  ^~~~ Undeserved parse error here
+            struct A { };
+    GSRN-TM-130617-2
+    SCDT, 7/17/13
+
+*   In a /mem-initializer/ for a non-static data member of type 'bool'
+    where the member is value-initialized, we
+    were issuing a technically-correct-but-unhelpful Info message 1786
+    ("Implicit conversion to Boolean"). Example:
+        A {
+        bool b;
+        A() : b() // Unhelpful Info 1786 here
+            { }
+        };
+    GSRN-IN-130618-2
+    VIBN, 7/19/13
+
+*************** MISRA C 2004
+
+*   We were over-eager to report on supposed violations of MISRA C
+    2004, rule #8.9, when performing a unit check. We now perform
+    a more restrained analysis.
+    GSRN-MI-130806-1
+    SUSU, 8/19/13
+
+*   Lint was incorrectly issuing a MISRA 2004, rule #6.2 violation
+    for certain case labels. This error has been corrected.
+    GSRN-MI-130805-2
+    PCTC, 8/20/13
+
+*   We now perform a more correct analysis with respect to MISRA C
+    2004, rule #8.8 (Object/function previously declared)
+    GSRN-MI-130606-1
+    ELIS, 10/30/13
+    
+*   We now issue a diagnostic (message 9042) about departure from the
+    prescribed MISRA switch syntax.  MISRA C 2004 Rule 15.0
+    MMV9, 4/25/14    
+
+*************** MISRA C 2012
+
+*   We now report violations of MISRA C 2012, 
+    rule #15.2  (goto references earlier label)         GREL, 8/22/13
+    rule #15.7  (no 'else' at end of 'if ... else if')  GSRN-MI-130802-5  EEBM, 8/20/13      
+
+*   We now perform a more accurate analysis for the following MISRA C 2012 Rules 
+    
+    rule #9.3   (too few initializers)                               PAIM, 8/28/13
+    rule #10.4  (mismatched essential type)                          GSRN-MI-131010-2  NETA, 10/30/13
+    rule #10.5  (impermissible cast)                                 C01B, 9/20/13
+    rule #11.1  (conversion between pointer to incomplete type/other type) CIIT, 10/3/13
+    rule #11.4  (cast pointer/integer)                               COPI, 10/4/13
+    rule #11.5  (cast from pointer to pointer)                       PVOP, 10/7/13
+    rule #12.1  (dependence placed on precedence)                    MAPM, 10/9/13
+    rule #13.3  (increment/decrement combined with other operations) IDPM, 10/10/13 
+    rule #14.4  (condition should have essentially Boolean type)     CEEB, 10/10/13
+    rule #16.5  (default should be first or last)                    SESD, 10/11/13 
+    rule #18.7  (flexible array member declared)                     GSRN-DC-140221-1   MAFA, 2/27/14 
+ 
+*   We now provide more thorough analysis/coverage for the following MISRA C 2012 Rules
+
+    rule #6.2   (named signed single-bit bit-field)         GSRN-MI-131210-1  ABMA, 12/17/13
+    rule #8.3   (parameter list differs)                    MFPA, 9/20/13
+    rule #8.4   (extern defined without prior declaration)  VDEI, 10/3/13
+    rule #8.11  (array has no dimension or initializer)     ADED, 8/28/13    
+    rule #9.2   (omitted braces within an initializer)      BIAU, 12/12/13
+    rule #10.1  (unpermitted operand)                       BEM3, 9/20/13
+    rule #11.3  (cast from pointer to pointer)              DPOT, 12/16/13
+    rule #11.9  (integer null pointer constant)             NNPC, 10/7/13
+    rule #13.4  (assignment used inside larger exp)         RAEU, 10/25/13
+    rule #13.6  (sizeof used with exp with side effect)     SESA, 12/18/13    
+    rule #15.3  (goto not nested in same block as label)    MGLR, 12/11/13
+    rule #15.4  (more than one 'break' terminates loop)     SBGR, 12/12/13
+    rule #15.6  (sub-statement should be compound)          ISCS, 9/16/13     
+    rule #16.3  (missing unconditional break)               GSRN-MI-140328-1  MUBM, 4/1/14
+    rule #16.4  (default case has no statement/comment)     CSDB, 10/28/13
+    rule #16.6  (too few cases in switch)                   SN2C, 10/10/13
+    rule #17.2  (recursive function)                        RRFM, 9/17/13
+    rule #20.3  (Need < or " after #include )               SAID, 11/27/13
+    rule #21.1  (def/undef of reserved identifier/macro)    MMRI, 9/18/13 
+
+*   We now perform a more accurate identification of MISRA C
+    2012 `composite expressions` in diagnosing violations of
+    Rule 10.7.  Specifically, note 9032 is no longer issued
+    when using array indexing on pointer types.
+    INCE, 8/19/14
+    
+*   We now perform a more thorough analysis for deprecation
+    checking and with respect to MISRA C 2012's deprecation of
+    certain identifiers.
+    ECDT, 10/2/13
+ 
+*   We now perform a more accurate analysis with respect to MISRA
+    2012 composite expressions and array indexing.
+    GSRN-MI-140107-1
+    AINC, 2/12/14    
+
+*   We now perform more accurate analysis with respect to MISRA C 2012
+    essential types.    GSRN-MI-130927-1    NETP, 10/30/13
+                        GSRN-MI-131111-1    EMET, 11/19/13
+
+*   We now perform more accurate analysis with respect to MISRA C 2012
+    essentially Boolean expressions.
+    GSRN-MI-140109-2
+    SBMB, 2/14/14
+    
+*   We now provide a flag (+fta) to regulate when to perform ambiguity
+    checking for MISRA C 2012 Advisory Directive 4.5
+    GSRN-MI-140321-1
+    TACF, 5/19/14
+    
+*   We now issue a diagnostic (message 9042) about departure from the
+    prescribed MISRA switch syntax.  MISRA C 2012 Rule 16.1
+    MMV9, 4/25/14
+
+***************  MISRA C++   
+
+*   We now report MISRA C++ diagnostics with separate message
+    numbers for each particular MISRA C++ rule.
+    GSRN-MI-130907-1
+    MCP9, 1/2/14
+    
+*   We now provide separate diagnostics for several more MISRA C++
+    rules.  Please see the updated au-misra-cpp.lnt file for details.
+    CRMM, 5/5/14    
+ 
+*   We now perform a more accurate analysis with respect to MISRA C++
+     
+     rule #5-0-15.     GSRN-MI-140225-5      UMRA, 4/10/14
+     rule #7-3-1.      GSRN-MI-131009-1      MOMC, 10/30/13
+     rule #9-6-2.      GSRN-MI-131017-1      IMBA, 10/29/13  
+    
+*   We now perform a more thorough analysis with respect to MISRA
+    C++, rule #9-6-4,  
+    GSRN-MI-131210-1
+    ABMA, 12/17/13    
+    
+*   We now perform a more accurate diagnosis of MISRA C++ rule
+    5-0-2 (limited dependence on operator precedence).
+    Specifically, note 9113 is no longer issued when the two
+    operators in question are the same.
+    PMOO, 8/18/14
+
+*   We now provide a more precise diagnostic when enforcing MISRA
+    C++, rule 5-2-9 (cast from pointer to integer).  Previously,
+    message 923 (cast between pointer and non-pointer) was used to
+    support this message but resulted in false positives due to the
+    fact that it was overscoped compared to the MISRA rule.  The new
+    message, 9091 (casting from pointer type to integer type), has a
+    much narrower scope resulting in more accurate analysis.
+    OMMC, 6/4/14
+    
+*   We now issue a diagnostic (message 9042) about departure from the
+    prescribed MISRA switch syntax.  MISRA C++ Rule 6-4-3
+    MMV9, 4/25/14    
+
+*************** 
+ 
+*   We now report when the last case of a switch-statement does
+    not end with a 'break'.
+    FUBD, 10/4/13
+ 
+*   We were not always issuing elective note #9003 when
+    useful. The matter has been adjusted.
+    ABSD, 9/16/13
+    
+*   We now provide warning #488 for when an implicitly assigned
+    enumerator value is repeated in the same enumeration.
+    IDEV, 8/28/13
+
+*   We now report on attempts to modify the contents of a string
+    literal.
+    RMSL, 9/13/13
+
+*   Lint now supports the use of multiple '-deprecate()' options to
+    combine deprecation messages. Such joined messages appear
+    separated by commas.
+    MDOA, 9/19/13
+
+*   We no longer issue elective note 1930 for operator conversion
+    functions marked explicit.
+    EOCF, 10/17/13
+
+*   We now report the use of the final and override virt-specifiers
+    within the symbols flags field of the program_info facility.
+    NFPI, 10/17/13
+
+*   In certain circumstances, the effect of single-line suppressions
+    appearing inside of C++-style comments would be extended past
+    the line on which the option appeared.  This behavior has been
+    corrected.
+    SLSL, 10/17/13
+
+*   In 9.00k, we corrected the handling of unsigned bit fields with
+    a width of less than int such that they promote to int instead
+    of unsigned int.  An unintended consequence of this change is
+    that we would complain when such a promoted value was combined
+    with an unsigned value.  Since the bit-field is unsigned, we
+    know that the corresponding value cannot be negative despite the
+    promotion to int but were not taking this into account in the
+    issuance of certain messages such as 571, 732, and 737.  This
+    behavior has been corrected.
+    MUBN, 10/17/13
+
+*   We were issuing an elective note #9008 for the use of
+    'operator delete'. This problem has been fixed.
+    GSRN-MI-131016-1
+    RCDS, 10/22/13
+
+*   We have corrected an issue where we would give an extraneous
+    message about duplicate initialization of structure members
+    when initialization of two structures of the same type are
+    initialized using designators.
+    GSRN-IN-131016-1
+    UDIM, 10/22/13
+
+*   We were unintentionally reporting on nested comments within
+    *.lnt files. This has now been corrected.
+    GSRN-OP-131017-1
+    SCNC, 10/22/13
+
+*   We now output the full name of aggregate members when issuing
+    message 793.
+    UFSN, 11/5/13
+
+*   We now only consider identifiers with external linkage when
+    generating message 793 relating to number of external identifiers
+    or the number of significant characters in external identifiers.
+    EIEL, 11/6/13
+
+*   Previously, message 1117 would be prematurely emitted for a
+    class that derives from a dependent type and declares an
+    implicitly virtual function that overrides a function from that
+    type and uses the final or override virt-specifiers in the
+    declaration of the overridden function.  This has been corrected.
+    EIEL, 11/6/13
+
+*   Previously, message 1119 would be prematurely emitted for a
+    class that derives from a dependent type and declares a virtual
+    function marked with override that overrides a function from
+    that type.  This has been corrected.
+    EIEL, 11/6/13
+
+*   The abnormal "&A::f" was not always being interpreted properly.  It
+    is considered abnormal since it is not the same as &(A::f)
+    This has now been fixed.
+    GSRN-EP-131023-1
+    PMAM, 11/7/13
+
+*   An initializer function is one whose semantics indicate that it
+    will initialize each member of the class of which it is a member.
+    We were inadvertantly reporting that such initializers did not
+    initialize every member of each base class of that class.
+    This has been fixed.
+    GSRN-IN-130820-1
+    INNI, 11/8/13
+
+*   We now perform a more accurate analysis with respect to stack
+    analysis when strong types are involved.
+    GSRN-SG-131113-1
+    STVS, 11/20/13
+
+*   A recent modification caused a sizable increase in memory usage. We
+    have addressed this behavior.
+    SMUI, 11/21/13
+
+*   GCC/Clang support the following uses of __attribute__():
+
+        __attribute__((__gnu_inline__))
+        __attribute__ ((__always_inline__))
+
+    This is now supported and treated as equivalent in meaning to the
+    'inline' keyword.
+    GCIA, 12/30/13
+
+*   An option containing an unbalanced quote would silently chew up
+    an entire file.  It is now greeted with Warning 686.
+    QPRO, 1/24/14
+
+*   We now process apparent ends of C-style comments more sanely.
+    GSRN-SC-140108-1
+    DSEC, 1/23/14
+
+*   We now support the use of _Static_assert in C11 programs.
+    ESAC, 1/28/14
+
+*   In the following example, we were issuing an undeserved Error about
+    the redefinition of x:
+        // t.h:
+            extern "C" { const int   x = 1; }
+
+        // t1.cpp:
+            #include "t.h"
+
+        // t2.cpp:
+            #include "t.h"
+    SOLS, 1/30/14
+
+*   Several additional type-trait operators were introduced; the supported
+    set is necessary for all C++11 compilers and sufficient for VS2012
+    headers; they are:
+        __is_literal_type(T)
+        __is_trivially_copyable(T)
+        __is_trivial(T)
+        __is_standard_layout(T)
+        __underlying_type(T)
+    TRVC, 1/30/14
+
+*   We were reporting a mixing of 'const' qualified strong types
+    and non-qualified versions of the same type as a strong type
+    violation. We have altered this behavior.
+    IQST, 2/12/14
+
+*   We now provide the correct expansion for __STDC_VERSION__ in
+    C11 mode.
+    USMC, 2/13/14
+
+*   Given the two functions:
+        void f( unsigned && );
+        void f( const unsigned & );
+    The call f( 3 ) was erroneously reported as being ambiguous whereas
+    the standard gives a tie-breaker rule which prefers an R-value reference
+    over the L-value reference.
+    RRCR, 2/17/14
+
+*   We now support C++11 range-based for statements.
+    RBFS, 2/18/14
+
+*   A -strong() type based on 'void' could elicit undeserved messages;
+    e.g. in:
+        //lint -strong(AXJ)
+        typedef void  VOID;
+        static VOID test(VOID) { ; }
+        void main( void) { test(); } // undeserved "ignored return value"
+                                     // message here
+    We now avoid the construction of a "strong-void" type.
+    GSRN-SG-140225-1
+    NSFV, 2/25/14
+
+*   We now support C++1y binary literals.
+    SBLC, 2/25/14
+
+*   We now provide the correct expansion for __STDC_VERSION__ in
+    C95 mode.
+    GSRN-MC-140225-1
+    USMC2, 2/25/14
+
+*   We now perform a more complete analysis with respect to
+    warning #485.
+    GSRN-IN-140219-1
+    DIIA, 2/25/14
+
+*   We now provide more useful HTML output.
+    GSRN-MS-140219-1
+    FHFO, 2/26/14
+
+*   Note #9018 has been reduced in focus to declarations of unions
+    and union based types, such as pointers, references, and
+    arrays. We also now specify the symbol declared, if available,
+    as well as any const/volatile qualifications of the type.
+    GSRN-MS-140220-1
+    TQMM, 2/27/14
+
+*   We now provide the name of the macro and the argument to the
+    same responsible for prompting elective note #9015.
+    GSRN-MS-140225-1
+    IMNM, 2/28/14
+
+*   We now support C++14 digit separators.
+    SQDS, 3/2/14
+
+*   We now distinguish between structs, unions, and classes when
+    reporting informational #754.
+    GSRN-MS-140220-1
+    IWCR, 3/3/14
+
+*   We now provide the qualified name of the symbol in elective
+    note #9150.
+    GSRN-MI-140225-2
+    QNMM, 3/5/14
+
+*   We now support the C++11 final class-virt-specifier.
+    IFCS, 3/14/14
+
+*   We now support the use of message patterns with +/-efreeze and
+    ++efreeze.  For example, ++efreeze(527) will permanently prevent
+    the suppression of message 527 and +efreeze(1??) -efreeze(159)
+    will prevent the suppression of all messages between 100-199 with
+    the exception of 159.
+    FIMP, 3/27/14
+
+*   Some versions of the -emacro option did not work properly when
+    used with the +efreeze option.  This has been corrected.
+    FIMP, 3/27/14
+
+*   Some combinations of message patterns used with certain message
+    inhibition options did not behave as expected when seen while
+    a +efreeze option was in effect.  This has been corrected.
+    FIMP, 3/27/14
+
+*   Typos in the text of several error messages were corrected.
+    VTEM, 4/6/14
+
+*   Previously, the second and subsequent symbols referenced in a
+    --emacro((#), ...) or --emacro({#}, ...) option were treated as
+    if the single hyphen version of the option was used.  This
+    behavior has been corrected.
+    MSPE, 4/21/14
+
+*   We now avoid false positives for note #9058 with respect to
+    namespace identifiers.
+    GSRN-MI-140407-2
+    FMN9, 4/22/14
+
+*   We were issuing false positives of elective note #9074 when
+    strong types were active. We have corrected this behavior.
+    GSRN-MI-140508-1
+    FPST, 5/15/14
+
+*   We were treating the access of structure member data as a
+    modification of that data, even if that access resulted in no
+    modification. This could result in unwarranted 1763 messages.
+    This treatment has been adjusted.
+    GSRN-FN-110413-1
+    UWTD, 4/24/14
+
+*   In version 9.00k, an undeserved 650 message would sometimes be issued
+    when the left shift operator was used.  This has been resolved.
+    GSRN-EP-140424-1
+    UORM, 5/7/2014
+
+*   Message 9076 is no longer issued for conversions to or from pointers
+    to void.
+    GSRN-MI-140504-1
+    PVEM, 5/7/2014
+
+*   9xxx series messages are now handled properly when used in
+    conjunction with the -zero(#) option.
+    GSRN-OP-140407-1
+    ZC9M, 5/7/2014
+
+*   The -zero option no longer interferes with the number of messages
+    reportedly produced via message 900.
+    SAMC, 5/8/2014
+
+*   Message 865 now participates in the error count provided by message
+    900 and in the exit code.
+    SAMC, 5/8/2014
+
+*   Previously, the exit code was one higher than expected when lint
+    terminated from a fatal error.  This behavior has been corrected.
+    SAMC, 5/8/2014
+
+*   We no longer issue elective note 910 for conversions from nullptr to
+    pointer type.
+    DI9N, 5/9/2014
+
+*   We were unknowingly not honoring '-efile(314, ...)'
+    options. This oversight has been corrected.
+    GSRN-OP-140512-1
+    EONS, 5/15/14
+
+*   We now provide a more useful heading when displaying
+    messages at the end of the first pass and immediately before
+    global wrap-up.
+    REMH, 5/20/14
+
+*   We were issuing a "bad type" error for certain comparisons
+    between pointers and C++11's nullptr. This behavior has been
+    corrected.
+    GSRN-PN-140507-1
+    PNCI, 5/20/14
+
+*   We were issuing an undeserved error #1024 for overloaded
+    static member functions of instantiated class templates. We
+    have corrected this oversight.
+    GSRN-TM-140513-2
+    OMEF, 5/23/14
+
+*   We were reporting as deprecated, variables with the same name
+    as deprecated functions. This behavior has been corrected.
+    GSRN-OP-140520-1
+    FDGN, 6/2/14
+
+*   The 9xxx messages were erroneously being included in the freeze
+    set when +efreeze, -efreeze, or ++efreeze was used with a
+    warning level below w4.  This has been corrected.
+    EMEI, 5/27/14
+
+*   We now provide more descriptive information when issuing
+    informational #843 for anonymous unions/structures.
+    GSRN-MS-140328-1
+    CAON, 4/2/14
+
+*   We now issue a general warning with respect to non-standard
+    uses of the 'defined' preprocessor operator via the new message
+    491.
+    SPUC, 5/2/14
+
+*   We now warn against the use of "-elibmacro(*)",
+    "-emacro((*),...)", "--emacro((*),...)", "-emacro({*},...)",
+    and "--emacro({*},...)" options due to the potential for
+    excessive suppression.
+    GSRN-OP-140507-2
+    ANSO, 5/13/14
+
+*   We now warn if a combination of '-w' or '-wlib' options
+    results in a zero length zone of transition, as described in
+    the Lint manual.
+    GSRN-OP-140512-2
+    DWLI, 5/14/14
+
+*   Previously -estring() would not work against the type-name that
+    appeared as a message parameter value of certain messages
+    including 1509 and 1510.  That issue has been corrected.
+    GSRN-MS-140513-3
+    MTSM, 5/13/14
+
+*   Previously lint was not using the type of the second operand
+    as the result type of the conditional operator when the last
+    operand was a null pointer constant and the second operand
+    was a pointer type as prescribed by C (but not C++).  This
+    could result in undeserved messages such as 9080 and 826 for
+    such expressions.  For example:
+
+        #define NULL ((void *)0)
+        void f(int *pi) {
+            // Result type below should be int *, not void *
+            pi = (1) ? pi : NULL;
+        }
+
+    This behavior has been corrected.
+    GSRN-CV-140503-1
+    IRTC, 6/26/14
+
+*   The warning level set by -w# options encountered in a -save
+    region were not properly being restored by a subsequent -restore
+    option which could cause a following -w# option to have no
+    effect.  For example:
+
+        //lint -save -s1
+        //lint -restore
+        //lint -w1  No Effect
+        int a;  // Message 714 not suppressed here
+
+    This issue has been corrected.
+    GSRN-OP-140622-1
+    WLNR, 6/27/14
+
+*   We now treat string literals as arrays of const char when
+    in C++11 mode when +fsc is on.
+    SLAC, 7/21/14
+
+*   An undeserved 1540 (Pointer member ... neither freed nor zeroed by
+    destructor) was unfairly given when a destructor was declared in a
+    base class but not defined there.
+    DREB, 7/25/14
+
+*   Certain combinations of lambdas and other class temporaries could
+    cause an unexpected type-mismatch scenario; example:
+        struct A {
+            A(){}
+            A(A const&){}
+            template<class T> A(T){}
+        };
+        A f() { return A([]{}); }
+    COTN, 8/13/14
+    
+
+*************** Version 9.00k  -- September 20, 2013 ***************
+
+*   Much of what is new in this patch has to do with support for the
+    new MISRA C 2012 guidelines.  This was a substantial revision of the
+    MISRA standard where even fundamental definitions were revised
+    and a host of new messages were added.  Some of the added rules
+    are highly creative and programmers might want to follow a sampling
+    of the rules even though not committed to the MISRA C 2012 standard.
+
+    Special Elective Notes have been created in a brand new 9000 series
+    of messages rather than use derivatives of 960 and 961 as was done
+    for MISRA 1 and 2.  The numbering systems for all older messages,
+    by the way, have not changed, forward compatibility being our bible.
+    The easiest trigger for enabling MISRA 3 is to use the special
+    au-misra3.lnt available from our web site.
+    
+*   msg.txt has been updated to include the messages added since
+    our Version 9.0 Reference Manual was released. 
+
+*   A new file, msg.json, contains the same information as msg.txt in
+    the more easily parsed JSON format.  The msg.json file contains 
+    an array of objects, one for each message.  Each object contains 
+    the string members TEXT, ID, COMMENTARY, and CATEGORY which 
+    contain the message text, the message number, the commentary 
+    present in the msg.txt file, and the error level, respectively.    
+
+*   Support for VS 2012 is available through co-msc110.lnt.  Our 
+    coverage of C++ 2011 has been increased but not enough to 
+    handle all the new C++ 2011 syntax introduced in Microsoft 2012. 
+    As a stop-gap measure we are providing a file named 
+    "lib-msc110-emergency.lnt".  This can be used to suppress many 
+    unwarranted messages while using VS 2012 (msvc 11).
+
+*   We now support the POSIX single quote character (') as a flag in the
+    printf format specifier syntax.  It signals a thousandth character.
+    E.g.  printf( "%'d, 20000 ) will print "20,000"
+
+*   We were not recognizing when the assignment to a member of a
+    global anonymous union constituted a side-effect. This
+    behavior has been corrected.
+
+*   We were unknowingly rejecting length modifiers for the 'X'
+    format specifier in scanf()-style calls; this has now been
+    corrected.
+
+*   We now provide explanatory information for why a reserved
+    identifier pattern violates MISRA C 2004, rule #20.2.
+
+*   We now perform a more accurate analysis for violations of
+    MISRA C 2004, rule #10.1, with regards to switch statements.
+
+*   We have corrected an overzealous reporting of MISRA C++ rule
+    5-2-12 violations when the argument in question is a string
+    literal.
+
+*   We incorrectly issued a redefinition error for two or more
+    tagless structures defined on the same line. This has been
+    corrected.
+
+*   When a variable was accessed in only one function and
+    used in the initializer of another global variable as in:
+        unsigned a;
+        unsigned* const b[] = { &a };
+        void c(void) { a = 42u; }
+    we erroneously issued:
+        Note 960: Violates MISRA 2004 Required Rule 8.7, could define
+        variable at block scope: 'a'
+    This behavior has been corrected.
+    GSRN-MI-130614-1 
+
+*   We were issuing a false positive MISRA C (1998 Rule 22 and
+    2004 Rule 8.7) violation diagnostic when a variable was accessed
+    in only one function but was used in the initializer of another
+    global variable. This behavior has been corrected.
+
+*   Previously, the -deprecate option did not have any effect when
+    attempting to deprecate certain C99-specific keywords.  This has been
+    corrected.
+
+*   We now support the C++11 final and override function virt-specifiers.
+
+*   We now support the C11 _Alignof keyword.
+
+*   Previously, the type difference report provided with message 64 would
+    be truncated at 100 characters.  This limit has been increased.
+
+*   Previously, extraneous <br> tags would be emitted upon encountering
+    header files in HTML mode which could result in a noticeable number of
+    blank lines at the beginning of each module.  This has been corrected.
+
+*   Previously, unsigned bit-fields were promoted to unsigned int during
+    the usual unary conversions which resulted in false positive messages
+    in certain cases.  Such bit-fields are now correctly converted to int
+    when the width of the bit-field is less than the number of bits used
+    to represent an int and K&R mode is not enabled. 
+
+*   We were incorrectly identifying tagless structs defined in a
+    header file as different when that header file was #include'd
+    in multiple modules. This behavior has been corrected.
+
+
+*************** Version 9.00j  -- January 4, 2013 ***************
+
+*   We have improved support for MISRA 1998, rule #70, and MISRA
+    2004, rule #16.2.
+
+*   We have improved support for MISRA 1998, rule #50, and MISRA
+    2004, rule #13.3.
+
+*   We have improved support for MISRA 2004, rule #8.12, and MISRA
+    C++, rule #3-1-3.
+
+*   We now report violations of MISRA 1998, rule #38, MISRA 2004, rule
+    #12.8, and MISRA C++, rule #5-8-1.
+
+*   We now perform a more thorough check for compliance with the MISRA
+    C and MISRA C++ switch syntaxes.
+
+*   We have improved support for MISRA C 1998, rule #61, MISRA C
+    2004, rule #15.1, and MISRA C++, rule #6-4-4.
+
+*   We have enhanced support for detecting violations of MISRA C 2004,
+        rule #19.16, and MISRA C++, rule #16-0-8.
+
+*   We now catch violations of MISRA C 1998, rule #96, MISRA C 2004,
+    rule #19.10, and MISRA C++, rule #16-0-6.
+
+*   We have expanded Lint's reporting on violations of MISRA C 1998,
+    rule #16, MISRA C 2004, rule #12.12, and MISRA C++, rule #3-9-3.
+
+*   We have enhanced Lint's coverage of MISRA C 1998, rule #100, MISRA
+    C 2004, rule #19.14, and MISRA C++, rule #16-1-1.
+
+*   When 'sizeof' was not immediately followed by a left parenthesis, we
+    would still attempt type/expression disambiguation even though
+    expression grammar does not allow an unparenthesized type-id in that
+    context. This led to undeserved Errors. Example:
+        struct A { A(...); };
+        struct B {};
+        struct Q {
+            enum {
+                 y = sizeof A(B()) // Undeserved Error 139 here
+            };
+        };
+    GSRN-EP-111222-2
+
+*   We were inadvertently issuing the wrong message (783 Line does not
+    end with a new line) for a too long input line.
+    The correct message is Error 91 (Line exceeds ... characters,
+    use +linebuf).
+    GSRN-DC-120111-1
+
+*   We now perform even more accurate diagnoses with respect to
+    external identifiers.
+
+*   We have improved support for MISRA C 1998, rule #90, and MISRA C
+    2004, rule #19.4.
+
+*   We now perform a more accurate diagnosis of violations for MISRA C
+    2004, rule #10.2.
+
+*   We now perform a more complete analysis with respect to MISRA C
+    2004, rule #10.1.
+
+*   We now perform a more complete analysis for MISRA C 2004, rule
+    #10.3, and MISRA C++, rule #5-0-8.
+
+*   We now provide location information when issuing diagnostics
+    related to MISRA C 1998, rule #22, and MISRA C 2004, rule #8.7.
+
+*   We have enhanced our detection of violations of MISRA C 2004, rule
+    #6.1, and MISRA C++, rule #5-0-11, to recognize when a switch
+    expression has plain char type and a case label value does not.
+
+*   We now provide diagnostics for violations of MISRA C 1998, rule
+    #35, and MISRA C 2004, rule #13.1.
+
+*   We now perform a more accurate diagnosis of violations of MISRA C
+    2004, rule #13.4.
+
+*   We now perform more complete analysis with respect to MISRA C
+    1998, rule #71, and MISRA C 2004, rule #8.1.
+
+*   We now perform a more complete analysis with respect to MISRA C
+    1998, rule #25, and MISRA C 2004, rule #8.9.
+
+*   We now perform a more complete diagnosis with respect to MISRA C
+    1998, rule #111, and MISRA C 2004, rule #6.4, and MISRA C++, rule
+    #9-6-2.
+
+*   We have enhanced our detection of violations of MISRA C 2004, rule
+    #6.2, and MISRA C++, rule #5-0-12, to recognize when a switch
+    expression has explicitly signed char or unsigned char type and a
+    case label value is not an integer value.
+
+*   We now support MISRA C 1998, rule #112, and MISRA C 2004, rule
+    #6.5.
+
+*   We now perform a more complete analysis with respect to MISRA C
+    1998, rule #45, and MISRA C 2004, rule #11.1.
+
+*   We now perform a more complete analysis with respect to MISRA C
+    1998, rule #60, MISRA C 2004, rule #14.10, and MISRA
+    C++, rule #6-4-2.
+
+*   We now provide support for MISRA C 1998, rule #108, and MISRA C
+    2004, rule #18.1.
+
+*   When checking the validity of a /mem-initializer/ that names a class
+    type, we erroneously regarded strong-type qualification as a
+    type discriminant. Example:
+        //lint -strong()
+        struct A {};
+        struct B : public A {
+          typedef A X;
+          B() : X() {} // Undeserved Error 1069 here
+          // 1069: Symbol 'X' is not a base class of class 'B' and does not
+          // name a target ctor
+        };
+    GSRN-CL-120222-2
+
+*   When a named, nonzero integral constant was passed to a template
+    non-type parameter of non-reference type, the Lvalue-Rvalue conversion
+    was not applied and we erroneously considered the argument's value to
+    be zero.
+        template <int i> int f() { return 1/i; }
+        void g() {
+            const int r = 1;
+            f<r>(); // Erroneously treated as f<0>
+        }
+    GSRN-TM-120116-1
+
+*   We now perform more thorough reporting with respect to MISRA C
+    1998, rule #11, and MISRA C 2004, rule #5.1.
+
+*   We now perform a more thorough examination with respect to MISRA C
+    2004, rule #20.2.
+
+*   We now exempt volatile variables from warning #438, last assigned
+    value not used.
+
+*   We now perform a more accurate check for elective note #955.
+
+*   We were inadvertently reporting MISRA diagnostics for preprocessor
+    directives declared immediately after a #include of a library
+    header.  We have resolved this problem.
+
+*   We now perform a more complete analysis for MISRA C 2004, rule
+    #19.14.
+
+*   During LOB absorption, when we detected that the same class/struct
+    type had been defined differently, we would issue Error 126,
+    "Inconsistent structure definition 'Name'", without indicating the
+    location of either of the two struct definitions. This became a
+    problem when the struct was unnamed. The message now includes both
+    locations (including the names of primary source files so as to aid in
+    finding how the class was defined differently---e.g. by differences in
+    preprocessor macro configurations).
+    GSRN-LB-120405-1
+
+*   This mod affects customers seeking to use compiler optimization
+    when compiling FlexeLint with compiler optimization on.
+    The symptoms were that, with optimization on, the code was caught
+    in an infinite loop.  This problem has now been fixed.
+
+*   For a member function of an instantiated class, we were instantiating
+    default function call arguments too greedily and without the correct
+    instantiation context. Example:
+        template<class T> int g(void) ;
+        template<class T> struct  A { void f( int = g<T>() ) {} };
+        template <> void A<int>::f( int ) {} // Undeserved Error 40 here
+        // Error 40: Undeclared identifier 'T' [referencing g<T>()]
+    GSRN-TM-120517-1
+
+*   We now perform a more accurate analysis of sizeof() and pointer
+    differences when strong typing is utilized.
+
+*   In the event that we do not find the header file named in an #include
+    generated by a -header() option, we did not cite the file location of
+    the -header() option (typically inside a .lnt file).
+
+*   We now perform a more accurate analysis with respect to
+    detecting side-effects resulting from function calls.
+
+*   We were not checking for operands to division operators when they
+    would have undefined results.
+    GSRN-EP-120613-1
+
+*   We are now able to process multiple PCH files. The option -pch() still
+    accepts only one argument, but it can be used multiple times within
+    the same Lint run, and the pathname given to -pch may differ each
+    time. Alternatively, a relative pathname argument (as in
+    -pch(StdAfx.h)) may resolve to different PCH files in different
+    translation units.
+    GSRN-HP-120708-1
+
+*   Extended the UTF-16 support to .lnt files.
+
+*   We now perform a more thorough analysis with respect to MISRA
+    guidelines requiring an unconditional break statement at the
+    end of each switch case.
+
+*   We now mention the symbol in question when issuing diagnostics
+    for violations of MISRA C++, Rule 7-3-1.
+
+*   We were issuing an undeserved "Error 118 (Too few arguments (1)
+    for prototype 'class-name::operator new( unsigned, ...'"
+    at the occurrence of "new X" within a member function of a class
+    that defines an "operator new( ... )" with more than one argument.
+    We now ignore such member functions unless they are members of the
+    allocation class (or its base classes).
+    GSRN-OV-100927-1
+
+*   We did not previously consider as good form the use of inverted
+    tests within the 2nd argument of a for clause such as:
+        for( i = 0; 10 > i; i++ ) { ... }
+    The usual form would be:
+        for( i = 0; i < 10; i++ ) { ... }
+    We now accept both forms as 'normal';  will consider deprecating
+    the first if popular demand dictates
+    GSRN-LP-111214-1
+
+*   We now detect and complain when semantic function names (those used
+    as first arguments to the -sem option) contain angle brackets.
+
+*   In some cases, when a message referenced a template specialization, an
+    ill-formed substring would appear as a template argument.
+    GSRN-HP-120828-1
+
+*   A slight improvement to Info 805 was made so that it is obvious
+    that a narrow string is inappropriate in some contexts.
+
+*   Lint was issuing a false positive with respect to MISRA C 2004,
+    rule #19.4, when a macro definition was an unsigned integer. This
+    error has been corrected.
+
+*   An inappropriate Warning 438 (or Info 838) 'assigned value ... has
+    not been used' could be issued within a 'for' or 'while' loop.
+
+*   At template definition time, we issued an undeserved Fatal Error 330
+    (static_assert() failure) for a constant expression that named a
+    template non-type parameter of enumeration type.
+    GSRN-TM-121102-1
+
+*   Some file search handle objects were not closed
+    GSRN-HP-120702-2
+
+*   In April 2012, a regression was introduced wherein the declaration of
+    a Borland property member could lead to infinite recursion.
+    GSRN-HP-121213-1
+
+*   When processing a GCC __mode__ attribute, the unsignedness given in
+    the type-specifier is now combined with the type implied by the mode.
+    Example:
+        /*lint -rw_asgn(__attribute__,__gcc_attribute__) */
+        typedef unsigned U;
+        typedef unsigned char C;
+        typedef U  X __attribute__ ((__mode__ (__QI__)));
+        struct A { void f(X); };
+        void A::f(C) {} // Ok. (X and C are the same type.)
+    GSRN-HP-121214-1
+
+*************** Version 9.00i  -- January 6, 2012 ***************
+
+*   We were issuing a false positive #1764 for parameters which were
+    references to arrays when those arrays experienced a deep
+    modification.  We have corrected this.
+
+*   A class type that is not a specialization could succeed at template
+    argument deduction against a dependent specialization, eventually
+    leading to Internal Error, subcode 2040.  Example:
+        struct  A { };
+        void f(const A & t);                                    // #1
+        template<template<class> class U> void f(const U<A> & );// #2
+        void g() {
+            A x;
+            f(x); // ok (9.00h: Internal Error, subcode=2040 here)
+        }
+    GSRN-TM-110803-1
+
+*   An ill-formed class member definition in Microsoft's WTL sent us into
+    infinite recursion during the second pass. We now abort the processing
+    of ill-formed member-declarations much more gracefully. Example:
+        struct A {
+            virtual void f() = 0;
+        };
+        struct B : public A {
+            virtual void A::f(){} // Well-deserved Error 1040 here.
+        };
+
+*   We now report on violations of MISRA C 1998 #62, MISRA C 2004
+    #15.3, and MISRA C++ #6-4-6, when the switch expression is of
+    enumeration type.
+
+*   We now detect assignment operators used in sub-expressions in
+    violation of MISRA C++ rule 6-2-1.
+
+*   We now issue warning #663, suspicious array to pointer conversion,
+    for structure members arrays.
+
+*   We now perform a more thorough analysis for violations of MISRA
+    C++ rule #6-2-2 with respect to testing floating point variables
+    for equality.
+
+*   The use of -emacro() options were having trouble working when the
+    macro was used inside a class member function; we have resolved
+    this.
+
+*   Introduced initial support for GCC attributes.
+    Unless otherwise documented, GCC attributes will be ignored.  Over
+    time, we will implement support for specific attributes as demand and
+    resources warrant.  To err on the side of caution, we do not enable
+    "__attribute__" as a reserved word by default. (Non-GCC compilers may
+    use that spelling for a different form of attribute syntax.) Instead,
+    we have endowed the semantics of GCC's __attribute__ in a reserved
+    word that is spelled "__gcc_attribute__" and disabled by default.
+    Support can be enabled with an option like this:
+        -rw_asgn(__attribute__,__gcc_attribute__)
+
+*   We now perform a more intelligent analysis with respect to unread
+    values of reference parameters.
+
+*   We were issuing diagnostics about violations of MISRA C 2004 rule
+    #7.1, prohibiting the use of octal constants, before completing
+    the expansion of macros.  We now perform a more deliberate
+    analysis.
+
+*   We now perform a more accurate analysis with respect to variable
+    values read within a switch statement.
+
+*   In a context in which a member class of a class template is a "known"
+    dependent type (i.e., dependent but not a member of an unknown
+    specialization), we would erroneously regard the member class as
+    "non-dependent" when used as a template argument. This led to attempts
+    to instantiate dependent types, which led to other cascading errors.
+    Example:
+        template<class T> struct X { };
+        template<class T> struct A { struct B; struct C; };
+        template<class T> struct A<T>::B : X<C> {};
+    Here, we would attempt to instantiate X<A<T>::C> (which is
+    inappropriate).
+    GSRN-TM-111007-1
+
+*   When an initializer for a C++2011 'auto' variable had a strong type,
+    we did not use that strong type for type deduction; this led to
+    undeserved strong type Warning messages. Example:
+        //lint -strong(AcJdX,meters)
+        typedef double meters;
+        int main() {
+          meters x = 2; // Ok
+          auto y = x * x; // Undeserved Warning 663 here.
+          // 663: Assignment from a strong type '(meters*meters)' in context:
+          // initialization
+        }
+    (Note that type deduction for a function call must be done against the
+    underlying type because a function template specialization can be
+    called using arguments that have different strong types but the same
+    underlying type.)
+    GSRN-TM-111001-1
+
+*   We were inadvertently not treating library modules as library
+    during module wrap-up time.  This oversight has been corrected.
+
+*   Introduced support for the GCC "mode" attribute
+
+*   We did not recognize 'virtual' (implicit or explicit) as a trigger for
+    the instantiation of a member of an instantiated class.  Example:
+        template<class T> struct B { virtual void f() { } };
+        B<int> obj; // should trigger instantiation of B<int>::f().
+
+*   We were unintentionally issuing diagnostics about violations of
+    MISRA C++ rule #17-0-2 for created tags.  We have corrected this.
+
+*   A precision estimate for a call to a function containing a return
+    semantic such as -sem( f, @n < 256 ) was off by one.  The precision
+    estimate (for unsigned quantities) in this case is now 8 rather than 9.
+
+*   Our implementation of [dcl.init.ref] was out of date for the case of
+    an Rvalue reference whose underlying type is reference-related to the
+    type of an Lvalue initializer.  Example:
+        struct A {};
+        struct B { B(); };
+
+        void g( const B&, void*);  // #1
+        void g( B&&,      A* );    // #2
+
+        void f( B & q , A * p ) {
+            g( q, p ); // Undeserved Error 1023 here
+            // 1023: "Call 'g(B, struct A *)' is ambiguous"
+        }
+    This led to undeserved errors against certain uses of the Standard
+    Library when using the implementation provided with Visual Studio
+    2010; example:
+        #include <sstream>
+        #include <fstream>
+        void Error1023() {
+            std::ifstream x("Dummy");
+            std::stringstream y;
+            y << x.rdbuf(); // Undeserved Error 1023 here
+                            // for operator<<().
+        }
+    GSRN-OV-111102-1
+
+*   Function templates were incorrectly considered as part of the +stack()
+    analysis; this led to entries consisting only of "?" in the stack
+    usage report.
+    GSRN-TM-110719-3
+
+*   We now allow a braceless switch statement after being convinced
+    of its ultimate utility.
+
+*   We now properly interpret the following loop
+        int a[10];
+        for( i = 10; i > 0; i-- )
+            a[i] = 0;
+    and give the expected warning (661 out-of-bounds pointer)
+    fixing a bug that had crept in with Vers. 8.00x
+
+*   A problem with UTF-16 Little Endian has been fixed.
+
+*   We did not handle the case of a GCC attribute-specifier immediately
+    after the /identifier/ in a /namespace-definition/. Example:
+        //lint -rw_asgn(__attribute__,__gcc_attribute__)
+        namespace N
+        __attribute__ ((__visibility__ ("default")))  // Ok
+            { }
+
+*   We now perform more accurate diagnoses with respect to external
+    identifiers.
+
+*   We have corrected a bug which caused Lint to complain of binary
+    constants in a *.vcxproj file.
+
+*   The size option -sw# is documented as only affecting the size of the
+    built-in type wchar_t (if there is such a type) and not the size of
+    the underlying type for the case where wchar_t is a typedef name; but
+    the implementation actually affected the underlying type, leading us
+    to think that sizeof(short)==4 after:
+        -ss2 -sw4
+    GSRN-OP-111214-1
+
+*   We no longer issue an undeserved Note 975 for:
+        /*lint +pragma(asm,off) +pragma(endasm,on)
+            +e975 // For "unrecognized pragma" Note.
+        */
+        void f(void) {
+        #pragma asm
+          SYS #8
+        #pragma endasm  // Undeserved 975 here
+        // 975: Unrecognized pragma 'endasm' will be ignored
+        }
+    GSRN-PP-111215-1
+
+*   We now provide a flag, +fci, to allow the application of the
+    '_Complex' keyword in C99 to integer types.
+
+*   We were issuing complaints about functions defined without
+    prototypes in scope if those functions were declared inside an
+    unnamed namespace.  We now remain silent in such cases.
+
+*   We now perform a more complete conversion of *.vcxproj file to
+    Lint configuration information.
+
+
+*************** Version 9.00h  -- July 26, 2011 ***************
+
+*   Introduced support for alias templates for C++0x
+    ALTE, 4/12/11
+
+*   In a function temploid definition we would trip over a
+    function-try-block.  Example:
+        template<class  T>
+        void f(T) try { }
+        catch // Undeserved Error 10 here
+        // ("Expecting identifier or other declarator")
+        (...) {}
+    TFTB, 5/17/11
+
+*   The alignment of an empty class was assumed to be zero; it is now
+    assumed to be 1.
+    AEC1, 5/17/11
+
+*   We now refrain from issuing elective note #953 if the object is a
+    variable with class or struct type and lacks a User-provided
+    default constructor.
+    NDCC, 5/17/11
+
+*   Added support for __asm as it is understood by ARMcc and WindRiver:
+    1) as a function specifier, syntactically similar to 'inline':
+            __asm void h(void) { assembly code... }
+        ... where Lint will see __asm as equivalent to '_ignore_init'.
+    2) as a lead in to a braced region containing in-line assembly code:
+                __asm { ... assembly code ... }
+        ... where Lint will see __asm as equivalent to '_up_to_brackets'.
+    3) as a way of decorating a variable with an alternative name:
+            int n __asm("m");
+    Since different compilers treat this keyword in different ways, we don't
+    want to "pollute" the existing semantics.  So instead, we've
+    introduced a new keyword supporting the uses described above.  The spelling
+    is __ARM_asm and users of ARM and WindRiver can enable it using:
+        -rw_asgn(__asm,__ARM_asm)
+        -rw_asgn(asm,__ARM_asm)
+    GSRN-SC-100608-2
+    AKAR, 5/20/11
+
+*   During header bypassing, entities with internal linkage were not
+    properly adjusted to prevent undesired instances of Warning 528.
+    BSNF, 5/20/11
+
+*   We were accidentally describing two structures with different
+    definitions but identical tags as being defined identically.  We
+    now recognize the difference.
+    IDTN, 6/1/11
+
+*   We were tripping over a printf-style format specifier which
+    involved a string literal and the binary '+' operator.  We now
+    handle this situation more gracefully.
+    FSUO, 6/1/11
+
+*   We were issuing an undesired instance of Error 148 for an explicit
+    specialization at class scope as in:
+        struct  A {
+            template<bool x> int f();
+            template<> int f<false>();
+        };
+    LTLM, 6/3/11
+
+*   We now perform a more accurate analysis for compliance with MISRA
+    C 2004, rule #8.7.
+    MABD, 6/14/11
+
+*   We now process GCC's "__attribute__((__sfr__))" to recognize
+    variables which are special function registers and exempt such
+    from MISRA C 2004 rule 8.7 checking.
+    SFRM, 6/14/11
+
+*   Lambda/CLI-attribute disambiguation failed for a CLI attribute on a
+    parameter of a function defined outside of its class.  Example:
+        struct B {
+            void f(
+                [A( n = 42 )]  // ok (CLI attr)
+                int v );
+        };
+        void B::f(
+            [A( n = 42 )] // CLI attr; 9.00g sees a lambda.
+            int ){}
+    CALA, 6/20/11
+
+*   We were allowing cv-qualified reference types to be created; this is
+    now fixed.  Example:
+        struct Q {};
+        typedef Q &R;
+        template<class T> struct S;
+        template<> struct S<R>{}; // ok
+        template<> struct S<const R>{}; // Error: redefinition of S<Q&>
+    RNCV, 6/24/11
+
+*   We were issuing undeseved/unhelpful messages 1719, 1720 and 1520
+    against a move assignment operator.  Example:
+        struct  A {
+            A& operator=(const A&);
+            A& operator=(A&&); // 9.00g: 1719, 1720, 1520 here
+        };
+    GSRN-CL-110627-1
+    BDMO, 6/27/11
+
+*   We were issuing unhelpful instances of Warning 641 (implicit
+    conversion of enum to int) on comparisons between values of
+    enumeration type that differ by memory model qualification.  Example:
+        //lint +rw(far)
+        enum E { x };
+        enum E far a;
+        void f( enum E const b ) {
+            if (b == x) // No warning here (good)
+                {}
+            if (a == x) // Unhelpful Warning 641 here
+                {}
+        }
+    GSRN-EN-110627-2
+    FETI, 6/27/11
+
+*   We issued Info 1789 against a constructor template that could not be
+    mistaken for a constructor that could be used as a copy constructor.
+    Example:
+        struct A {
+            template <unsigned N>
+                explicit A(const char(&)[N]);  // Info not desired
+        };
+        struct B {
+            template <class T>
+                explicit B(const T& );  // Info 1789 desired
+        };
+    TEDC, 6/27/11
+
+*   For a #include directive naming a file that shares the name of a
+    directory that could be found in the "-i" path, we were not checking
+    for whether the directory entry is a regular file before the call to
+    fopen().
+    GSRN-PP-100720-1
+    DNRF, 6/27/11
+
+*   We issued undeserved Warnings 441 on variables implicitly converted to
+    class type.  Example:
+        struct A { A( int ); A(); };
+        bool f( const A& );
+        void g() {
+            for( int i=1; f( i ); ++i ) // Undeserved Warning 441 here
+                // 441: for clause irregularity: loop variable 'i' not found
+                // in 2nd for expression
+                {}
+        }
+    GSRN-EP-110628-1
+    SCEB, 6/28/11
+
+*   For a catch clause parameter of type "reference to const X", and where
+    X was a base class of an exception object, we would not recognize the
+    parameter as match, leading to an undeserved info 1775.  Example:
+        struct A { };
+        struct B : public A {};
+        void f() {
+            try { throw B(); }
+            catch (const A&) {}  // Undeserved 1775 here
+            // 1775: catch block does not catch any declared exception
+        }
+    GSRN-EX-110524-3
+    RCBC, 6/30/11
+
+*   Our support for MISRA C++ rule 3-1-1 did not take into account inline
+    functions, entities with internal linkage, or function templates.
+    311I, 7/5/11
+
+*   We issued an undeserved "not-a-member" Error for a definition of a
+    template that is a member of a class that is an explicit
+    specialization. Example:
+        template<class T> struct A;
+        template<> struct A<float>
+            { template<class T> void g(T); };
+        template<class T>
+         void A<float>::g(T) { } // Undeserved Error 1039 here
+         // 1039: 'g' is not a member of A.
+         // GSRN-TM-100729-2
+    MTES, 7/5/11
+
+*   We issued an undeserved Info 953 against using-declarations declared
+    at block scope.
+    953U, 7/12/11
+
+*   We now flag uses of 00 and '\00' as violations of the MISRA
+    prohibitions against octal constants and octal escape sequences.
+    MDZP, 7/12/11
+
+*   Tabs in output -- a new addition to the set of escapes for -format
+    and other similar format directed output is \T.  This is replaced
+    by a literal tab in the output.  \t remains unchanged as a tab that
+    is replaced by a suitable sequence of blanks.
+    TIFO, 7/18/11
+
+
+*************** Version 9.00g  -- June 1, 2011 ***************
+
+*   We now more accurately detect violations of MISRA C 2004 rule,
+    #12.6.
+    GSRN-MI-100901-2
+
+*   An undeserved Info 866 (unusual use of '>' in argument to sizeof)
+    was issued for the following code
+        int n = sizeof(int)
+        #if (1 > 0)
+        #endif
+          ;
+    GSRN-EP-100923-1
+
+*   We now perform a more accurate analysis for enforcing MISRA C++
+    rule 3-2-3.
+
+*   During PCH absorption of t.h in the following example, we mistakenly
+    regarded 'const A<int>' as completely-defined immediately after the
+    #include directive; this prevented us from instantiating A<int> when
+    needed (at the start of the body of g(Y), and led to undeserved Errors
+    about the members of that class.
+        // t.h:
+        template<class T> struct  A { int f (void) const; };
+        typedef const A<int> Y;
+        //
+        // t1.cpp:
+        //lint -pch(t.h)
+        #include "t.h"
+        void g (Y p) {
+            p.f ();   // Undeserved Error 1013 here (PCH absorption)
+            // 1013: Symbol 'f' not a member of class 'const A'
+        }
+
+*   We were neglecting one of the paragraphs in ISO C++, section
+    [dcl.link] for:
+        extern "C" {
+            void f(void);
+            namespace std {
+                void f(void);
+            }
+        }
+        using std::f; // Undeserved Error 1087 here
+    We now regard the f in namespace std to be an alias to the first
+    (equivalent to what we would do for a using-declaration in that
+    scope).
+    GSRN-US-101002-1
+
+*   At the point where we do function temploid instantiations at the end
+    of a translation unit, we were ignoring the fact that A<int>::f below
+    had been explicitly specialized; this lead to an instantiation that
+    should not have happened.
+        template<class T> struct A {
+               T m;
+               int f() { return m.h(); }
+        };
+        template<> int A<int>::f() { return 42; }
+        int g( A<int>& p ) { return p.f(); } // elicits erroneous
+                                             // instantiation
+    GSRN-TM-081017-1
+
+*   In cases involving Microsoft emulation mode and a member class
+    template used as a dependent base class, access checking got confused.
+    Example:
+        //lint ++template(200)  allow searches in formerly dependent base
+        //                      classes
+        template <template <class> class T> struct  A {
+               template <class U> struct  D { };
+        };
+        template <template <class> class T> struct  C :
+            public A<T>::template D<int> {
+               A<T>* j; // strange error 1061 here
+        };
+        // Error 1061: public member 'A<<1>>::D<<1>>' of type  is not
+        // accessible through non-public inheritance
+    GSRN-TM-081020-1
+
+*   Overload resolution when passing in the address of an overloaded
+    member function was being stymied by a syntactic glitch.  E.g.
+        struct A { void set(); void set(int); };
+        struct B {};
+        void c( void (B::*)(int) );
+        void c( void (A::*)(int) );
+        void f() { c( &A::set ); }
+    Resulted in Error 1025 (no function matches invocation).
+    GSRN-OV-101001-1
+
+*   In an attempt to cope with an ill-formed class, definitions like this:
+        typedef long M;
+        struct X {
+            M M;
+        };
+    ... (which appear in library header files that ship with at least one
+    popular compiler), we inadvertently also rendered certain
+    using-declarations invisible to name lookup; this was a regression
+    from 9.00b to 9.00c.
+    GSRN-CL-100915-2
+
+*   In:
+        namespace N { void f(double); void f(float); }
+        using N::f;
+        namespace N { struct A{}; void f (A); }
+        void g(N::A X) {
+            f(X); //  Undeserved Error 1025 here
+        }
+    We discarded the result of argument-dependent lookup (effectively
+    excluding N::f(N::A) from the set of functions considered by overload
+    resolution) because we erroneously regarded it as effectively
+    identical to the result of unqualified lookup.
+    GSRN-OV-100929-2
+
+*   We were warning about exceeding certain standard limits
+    prematurely.  We now recognize the correct number provided by
+    those limits.
+    GSRN-DC-101014-1
+
+*   We were handling:
+        enum E; // Error
+    ... less than gracefully.  Specifically we did not associate an
+    underlying type with that enumeration type, and this led to undesired
+    type mismatch errors later in the parse.
+    GSRN-EN-101021-1
+
+*   The option -os(stderr) now redirects ordinary message output to the
+    standard error stream (not to a file named "stderr"); likewise, the
+    option -oe(stdout) redirects, to the standard output stream, output
+    which would normally go to stderr.
+
+*   We now avoid issuing warnings #417 and #694 prematurely when
+    processing macro expansions.
+    GSRN-SC-101026-1
+
+*   We now recognize when an external identifier length exceeds the
+    limits mentioned in the ISO standards.
+    GSRN-DC-101026-2
+
+*   We now remain silent with respect to elective note #952 for
+    parameters declared as arrays.
+    GSRN-DC-101027-1
+
+*   A stack usage request such as:
+        -stack( f(120) )
+    can contain a directive (such as f(120)) that is used to indicate
+    an upper bound on the total stack utilization of a given function
+    (f() in the example).  Typically this would be done for functions
+    whose stack usage is difficult to compute such as those
+    that are recursive or call through a function pointer.
+    The report did not always reflect such directives.
+    GSRN-FN-101105-1
+
+*   We were crashing when an EOF was found inside a macro argument
+    list.  Though processing will still stop in such cases, we now
+    recover much more gracefully.
+
+*   Certain cases involving nested non-type template arguments could
+    elicit an Internal Error 1205 when a class template instantiation was
+    triggered in the outer template argument.  Example:
+        template<int N> struct A { enum { b = 42 }; };
+        int i = A<
+                    3 + sizeof(A<1>)
+                 > // Internal Error 1221 here
+                 ::b;
+    GSRN-TM-100510-1
+
+*   A date-time stamp mechanism was developed so that it would be possible
+    to place a date-time stamp on each and every .lnt file we issue.
+    GSRN-MS-101117-1
+
+*   We now avoid complaining about supposed violations of MISRA C++
+    rule #5-3-1 when the expression is of qualified bool type.
+
+*   We were failing to issue certain MISRA diagnostics if they were
+    activated with only a +esym() style option.  This has now been
+    fixed.
+
+*   Use of a buffer too small in size was resulting in a segmentation
+    fault when attempting to use the program info facility.  This size
+    has now been adjusted so as to prevent such recurrence.
+
+*   We now support the simulatneous activation of both MISRA C 1998
+    and MISRA C 2004 thru the use of the +misra() option.
+
+*   We have harmonized Lint's behavior with respect to ++efreeze and
+    message activation options to allow such options to take effect,
+    as described in the manual.
+
+*   During template argument substitution, a use of a function pointer
+    constant as a template non-type argument could elicit a crash.
+    Example:
+        struct A { static void f(); };
+        template <class T> struct B {
+            template<T x> class C;
+            template<class U> static char g(...);       // #1
+            template<class U> static long g(C<&U::f>*); // #2
+            enum { v = sizeof( g<A>(0) ) };
+        };
+        int n = B<int(*)(int)>::v;
+    GSRN-HP-110118-1
+
+*   We were inadvertantly attempting to define a function after the
+    end of a module was found, resulting in a segmentation fault.  We
+    have taken steps to prevent this behavior.
+
+*   We were issuing a segmentation fault over the processing of
+    '__declspec'.  This error has been corrected.
+
+*   In cases where we modify a token sequence (e.g. to comply with
+    the new rule for right-angle-brackets in C++0x), an Internal Error
+    could result.  Example:
+        template<typename T> class A;
+        template<typename T> void g();
+        void f() { g<A<int
+            >>  // Internal Error 1205 here
+            (); }
+    GSRN-HP-101123-1
+
+*   When processing an enum across modules, an initializer for an
+    enumeration constant (indicating a type larger than necessary) could
+    confuse us about the actual size of the enum, leading to complaints
+    about entities of that enumeration type.
+    GSRN-HP-110222-1
+
+*   Introduced support for Lambdas for C++0x.
+
+*   When a variable was declared with C language linkage in a user-defined
+    namespace inside a header designated as a pre-compiled header, we
+    would issue an undeserved "not initialized" Warning during a run with
+    PCH absorption.  Example:
+        // t.h:
+        namespace N {
+            struct B { int m; };
+            extern "C" int x;
+        }
+        // t1.cpp:
+        //lint -pch(t.h) -w1 +e530
+        #include "t.h"
+        int f() { return N::x; } // Undeserved 530 here
+    GSRN-LB-101223-1
+
+*   We now more accurately recognize and process array element
+    initialization when done via designators.
+
+*   Introduced support for alias declarations for C++0x.
+
+*   When class template partial ordering was triggered during a template
+    argument substitution, an Internal Error (code 1278) would result
+    while we tried to form a "unique value" used for deduction for partial
+    ordering.  Example:
+        template<class T, int N = 0> struct A   {typedef int X;};
+        template<class T, int N> struct A<T*, N>{typedef int X;}; // #1
+        template<class T >       struct A<T*, 0>{typedef int X;}; // #2
+        template<class T> typename T::X f(void);
+        int n = f< A<int*> >(); // Ok, uses #2
+    Here, argument substituttion of A<int*> for T in T::X triggers
+    instantiation for A<int*> which in turn triggers partial ordering of
+    #1 and #2.
+
+*   We expanded our list of recognized reserved identifier patterns
+    for C90.
+
+*   Functions designated as thread roots are by default considered as
+    multi-threads.  They were, if the designation came by way of a direct
+    semantic of the form -sem( name, thread ).  However, if the designation
+    came as a result of being placed in the appropriate place within a
+    thread_create function it was erroneously considered as thread mono.
+
+*   Inside a non-local class, in a friend declaration that names a class
+    with an unqualified-id, we would sometimes place the name of the
+    befriended class at global namespace scope rather than the nearest
+    enclosing namespace (as per [namespace.memdef]).  Example:
+        namespace N {
+            struct A;
+            struct B;
+        }
+        struct N::A {};
+        struct N::B {
+            friend struct A; // This refers to N::A, but at this point
+            // 9.00f injects the name 'A' into the global namespace.
+        };
+        using namespace N;
+        void f() {
+            A a; // Undeserved Error 1075 here.
+            // 1075: Ambiguous reference to symbol 'N::A' and symbol 'A'
+        }
+    GSRN-DC-081114-4
+
+*   We have corrected precision calculations involving floating point
+    quantities as operands to binary or unary operators.
+
+*   For the purpose of stack computation (see 13.13 Stack Usage Report)
+    we were erroneously regarding a throw as a non-deterministic
+    function call (a call through a pointer determined at run-time).
+    It is now considered a plain old external function.
+
+*   We have realigned Lint's behavior with respect to note #952 to
+    match the description in the manual.
+
+*   When using the +fdi flag (directory of including file) and when
+    linting a module in another directory which then includes a file
+    from that directory we erroneously would regard that file as
+    a library header (thinking it was 'foreign').  This error was
+    introduced in 9.00e and is now fixed.
+
+
+*************** Version 9.00f  -- September 28, 2010 ***************
+
+*   We were accidentally considering a header file as referenced by a
+    module if that header contained a class's member function
+    definition within the body of that class.
+
+*   We now detect violations of MISRA C 1998, advisory #101, and MISRA
+    C 2004 requirement #17.1.
+
+*   We now detect violations of MISRA C 1998, requirement #62, MISRA
+    C 2004 requirement #15.3, and MISRA C++, requirement #6-4-6.
+
+*   We now provide greater analysis for C99's _Complex, _Imaginary,
+    and restrict declarations.
+
+*   (Internal)  We expanded the space available for function argument
+    semantics.
+
+*   We were not properly resolving the overload in the following case:
+    struct A { }; struct B : A { }; struct C : B { };
+    void f(A*); // #1
+    void f(B*); // #2
+    struct Q { operator C*(); };
+    void g(Q q) { f(q); }  // spurious ambiguity msg (1023)
+                           // should call #2
+
+*   We were causing a segmentation fault when the second argument to
+    -printf_code() was absent.
+
+*   We were issuing a MISRA C 2004 rule #8.7 violation diagnostic for
+    local static variables.
+
+*   We now report the name of the function-like macro #define'd when
+    diagnosing violations of MISRA C 1998, rule #93, MISRA C 2004,
+    rule #19.7, and MISRA C++, rule #16-0-4.  The name may be used to
+    suppress the diagnostics selectively with a -estring() option.
+
+*   We added an estring()-able parameter to several MISRA messages.
+
+*   We now recognize when enumerators with the same value are used as
+    case labels within the same switch statement and, if necessary,
+    report accordingly.  We also refrain from issuing Informational #788
+    if an enum constant with the same value is used.
+
+*   We were issuing Informational #835 for the right hand side of the
+    expression, 0 << some_constant, when that constant was non-zero.
+
+*   We perform a more thorough analysis for MISRA C 2004 rule #17.4
+    and MISRA C++ rule #5-0-15.
+
+*   The following resulted in giving an undeserved internal error (1232)
+        struct any_type { any_type(...); };
+    The effects are benign and suppression is straightforward.
+
+*   We were not recognizing that a type mentioned in a function's
+    exception specification would match up with a catch block having
+    a parameter declared as a reference to a non-const version of the
+    type.
+
+*   We now consider throwing an exception to be an impurity and
+    consider function throwing exceptions as having side-effects, pure
+    semantic specification notwithstanding.
+
+*   We now warn on the use of -e*, -w0, -elib(*), and -wlib(0), since
+    such options can mask significant configuration issues.
+
+*   We were giving a false positive MISRA C++ diagnostic when the
+    increment or decrement operator was applied to class objects.
+
+*   We were issuing false positives of errors #161 for parameters and
+    #31 for block scope static variables for inline functions defined
+    within a header file.
+
+*   In a regression from 9.00d to 9.00e, we were incorrectly reporting
+    that a symbol was not a member of an unnamed class (Error 1013).
+
+*   The type of a namespace-scope enumeration constant was not properly
+    translated from a PCH.
+
+*   We were allowing rvalue references to bind to lvalues.  Thus we
+    would declare the following to be ambiguous:
+        class A{};
+        class B : public A {};
+        void f( A&& );
+        void f( A& );
+        void g( B c );
+            { f(c); }       // ambiguous
+
+*   We now more accurately detect violations of MISRA C 2004, rule
+    #10.5.
+
+*   We now more accurately detect violations of MISRA C 2004 rule,
+    #12.5.
+
+*   We now more accurately detect violations of MISRA C 1998, rule
+    #74.
+
+*   We were issuing an undeserved Error 118 (too few arguments)
+    when a trivial destructor was explicitly called using the dot
+    operator.  E.g.
+        struct A { /* no destructor here */ };
+        void f( A *b, A c )
+            {
+            (*b).~A();      // undeserved 118
+            c.~A();         // undeserved 118
+            }
+    GSRN-CL-100917-1
+
+*   We were issuing an undeserved Error 10 (expecting a structure or
+    union) when a trivial destructor was explicitly called using the dot
+    operator on a scalar.  E.g.
+        typedef int INT;
+        void f( INT i )
+            {
+            i.~INT();      // undeserved 10
+            }
+    GSRN-CL-100917-1
+
+*   With ++fln, a null directive (i.e., a logical line whose only token is
+    #) was misinterpreted as a GCC-style linemarker, whose grammar is:
+            #  linenum  filename  [flags]
+
+*   When processing the declaration of a member template during the
+    instantiation of a class template specialization using a partial
+    specialization, we became confused about the values corresponding to
+    the partial specialization's template parameters.
+    Example:
+        template<class S> struct A;
+        template<class R, class P> struct A<R(P)> {
+            template<class C>
+                A(R (C::*m)(P));
+        };
+        struct B { void g(int); };
+        B d;
+        A<void(int)> f(&B::g); // Undeserved Error 1025 here (because we
+            // didn't correctly parse the declaration of the ctor because
+            // we thought the type of R in that context was 'void(int)'.
+        //GSRN-TM-100923-3
+    The problem is that we suddenly started using the template argument
+    list passed explicitly to the primary template, <void(int)>, when we
+    should have used the deduced template argument list, <void,int>.
+
+
+*************** Version 9.00e  -- July 20, 2010 ***************
+
+*   A pre-compiled header could result in a crash when using semantics of
+    the form -sem(A::name,...) where A is defined within a pre-compiled
+    header.
+    PHSI, 12/7/09
+
+*   Strings that were previously limited in size are now unbounded
+    in length.  The option ++macros no longer has any effect.
+    IVLS, 12/8/09
+
+*   Some compilers that target embedded systems provide a C/C++ core
+    language extension that enables the user to specify, in a declaration
+    of a statically-allocated variable or a function, an address where the
+    declared entity is to be stored.  Example:
+            int a @ 0xFF02;      // 'a' is at memory location 0xff02
+            int b @ 0xFF00 = 42; // initializes b, at 0xff00, to 42
+    In our parser's support for this in variable declarations, we were
+    treating the address specifier as a component of an initializer, which
+    meant that we would parse it only within the context of a definition
+    and not in a forward-declaration.  Example:
+            extern int c @ 0xFF04; // forward-declaration of c; Lint 9.00c
+                                   // trips here.
+    But the compilers that support this feature all regard the specifier
+    as separate from the initializer and allow it in forward-declarations.
+    So the grammar for /init-declarator/ is:
+        init-declarator:
+                declarator  [address-specifier]   [initializer]
+        address-specifier:
+                '@'     constant-expression
+    This is now reflected in our parser.
+    ASIC, 12/08/09
+
+*   There was a problem with our representation of a using-declaration
+    that refers to an enumeration constant.  Symptoms arose only during
+    LOB and PCH absorption.  E.g. the following
+        namespace N { enum E { a = -1 }; }
+        using N::a;
+    elicited a "corrupt LOB" message.
+    CLEU, 12/09/09
+
+*   During argument dependent lookup (ADL) [basic.lookup.argdep], we were
+    not searching in the namespaces associated with template arguments of a
+    specialization that is an associated class (as we should have).  With
+    a version of GCC's STL implementation, this led to undeserved errors
+    with uses of find() with arguments of type vector<T>::iterator defined
+    as:
+        typedef __gnu_cxx::__normal_iterator<T*, std::vector<T> >
+                iterator;
+    During ADL, Lint would search for 'find' in __gnu_cxx but not in std.
+    Now we also take template arguments into account, so std is searched
+    as well in this case.
+    Furthermore, we were not considering namespaces associated with
+    argument types composed of function types.  Example:
+        namespace N {
+            struct A { };
+            void f(void (*)());
+        }
+        void g();       // #1
+        void g(N::A);   // #2
+        void h() {
+            f(g); // ok.
+            // The type of #2 causes ADL to search for 'f' in N,
+            // and then overload resolution selects #1 as the
+            // argument.  Versions 9.00d and earlier issued Error 1055 for
+            // this example.
+        }
+    ALPB, 12/09/09
+
+*   During PCH creation, we were outputting symbols of namespace-scope
+    entities that had not been declared in the current translation unit.
+    SE1P, 12/09/09
+
+*   In a using-declaration in a class template with a dependent base
+    class, we would assume more than we really knew about the set of base
+    classes; example:
+        struct A { void f(); };
+        template<class T> struct B : public A {};
+        template<class T> struct C : B<T> {
+            using A::f; // 9.00c7 gives undeserved Error 1091 here
+            // 1091: 'struct A' is not a base class of 'template C<<1>>'
+        };
+    AUBD, 12/09/09
+
+*   If a function template was used in the initializer of a static data
+    member of a class template, it could trigger an undesired
+    instantiation of a specialization of a function template whose
+    template arguments depend on a template parameter.  Example:
+        template<class T> T& f( T& t )
+            { return t; }// Undeserved Error 36 here
+                         // during instantiation (at module wrap-up time)
+        template<class T> struct A;
+        template<class T> struct B {
+            static A< T > j;
+            static int i;
+        };
+        template <class T> int B<T>::i = f(B<T>::j);
+    ICUI, 12/09/09
+
+*   We now support emulation of Microsoft's "nested #include search"
+    feature, in which an include-directive of the form:
+        #include "a.h"
+    causes the search for 'a.h' to consider first the directory of the
+    including file and then the directories of all other
+    actively-including files (from most nested all the way through the
+    directory containing the primary source file) before considering
+    directories specified by '-i' options.
+    DOIF, 12/09/09
+
+*   When the definition of an instantiated class X was required for the
+    first time in the definition of another instantiated class Y, we would
+    fail to recognize X as "defined" when the definition of Y was required
+    for the first time in a translation unit but not for the first time in
+    the lint run.  Example:
+        // t.h:
+        template<class T> struct A { int m; };
+        template<class T> struct B { A<T> v; };
+        static const
+        B<int> c={{42}};  // Undeserved Error 121 here (during t2.cpp).
+        // 121: Attempting to initialize an object of undefined type
+        //     'struct A<int>'
+        // t1.cpp:
+        #include "t.h"
+        // t2.cpp:
+        #include "t.h"
+    ICU2, 12/09/09
+
+*   When a non-type template parameter declaration appeared soon after a
+    use of a parenthesized initializer, a parse failure would result.
+    int n(42);
+    template<char *(*p)()> // Error 10 here
+        class A {};
+    DTPD, 1/5/10
+
+*   We issued a flow-through message within a switch in spite of the
+    fact that the user had placed an option that indicates that the
+    code is unreachable.
+    NAUO, 1/9/10
+
+*   An undeserved 794 "Conceivable use of null pointer" could occur
+    for a variable that is guaranteed non-null before a loop and
+    is not modifified (but tested) during a loop) and is used after
+    the loop.
+    UCUN, 1/24/10
+
+*   When FlexeLint was compiled for 64-bit systems, there were an awkwardly
+    high number of diagnostic messages.  These have been fixed.
+    SSFB, 1/27/10
+
+*   In a member access expression, if the id-expression began with the
+    :: scope resolution operator, we would issue a spurious Error 10.
+    Example:
+        struct  A { void g(); };
+        struct  B : public A { void g(); };
+        void f( B c ) {
+            c.
+                :: // Spurious Error 10 ("expecting identifier") here
+                A::g();
+        }
+    GSRN-EP-100127-1
+    MABI, 1/27/10
+
+*   When a strong dimensional type (Jd or just J with +fdd) is divided
+    by itself the result was not what was expected.  The result was
+    the type itself.  It is now resolved properly with the result
+    being a dimensionally neutral type.
+    DSDT, 1/28/10
+
+*   Corrected a crash which resulted from what lint thought was a
+    function within a function within a function (for C code which
+    can use K&R style function definitions this is much more likely
+    to happen)
+    FWFC, 2/1/10
+
+*   Under certain obscure circumstances we issued an undeserved 1413
+    when a reference to const pointer was being bound to a pointer.
+    E.g.
+        typedef void* const & R;
+        void * & q();
+        R m(  )
+          {
+          return q(); // Undeserved Warning 1413 here
+          }
+    FWRR, 2/2/10
+
+*   It was possible for a function parameter to be less capable than
+    the corresponding argument, considered ok by the language, and
+    allowed by our normal argument passing algorithm but rejected by
+    our overload resolution mechanism.  E.g. the following issued an
+    undeserved Error 1025.
+        void g( const void *const *  );
+        void g( int );
+        void f( void  *const *p)
+            { g( p ); }
+    ORCC, 2/2/10
+
+*   When an undeclared identifier was used in a base-specifier in the
+    definition of a class template at namespace scope, and when that class
+    template was followed by a "generic" function template (as defined by
+    MISRA C++), an Internal Error would be issued with subcode=2009.
+    Example:
+        namespace N {
+            template<class T> class B : A<T> { };
+            template<class T> void f(T); // IE subcode=2009 here
+        }
+    DSTI, 2/5/10
+
+*   Note 975 ("Unrecognized pragma") would be issued about an unknown
+    pragma even in a region of a source file that had been made inactive
+    because of conditional compilation.
+    // GSRN-PP-100121-2
+    UPIN, 2/8/10
+
+*   We would issue an undeserved Error 1051 for a function following a
+    type-dependent using-declaration of the same name that followed a
+    typedef.  Example:
+        template <class  T>
+        struct A : T {
+            typedef T X;
+            using T::f;
+            int f(); // Undeserved Error 1051 here
+            // 1051: Symbol 'f' is both a function and a variable
+        };
+    // Report ID: GSRN-DC-100125-1;
+    TCDU, 2/8/10
+
+*   We were accidentally lowering the probability of initialization
+    for a function parameter when that parameter's address was passed
+    to another function and the -fai flag was used.
+    GSRN-IN-091222-2
+    IUFA, 2/9/10
+
+*   The notation
+        :: operator delete( ... )
+    would not always find the global (builtin) operator delete().
+    GSRN-OV-100204-4
+    NFGO, 2/11/10
+
+*   We were complaining about a suspicious constant (message #620) in
+    the case of an integer-suffix with a 'u' followed by an 'l' (ell),
+    such as:
+        long ell = 0xFFFFul;
+    The message has been surpressed for this type of situation.
+    LFUS, 2/11/10
+
+*   We were issuing messages about violations of the MISRA 2 Rule 19.2
+    (Header file name with non-standard character) for headers
+    #include'd by use of -header() options.  This issuance was deemed
+    to be a bit of needless noise and is now silenced.
+    MMLH, 2/11/10
+
+*   Silence the issuance of complaints of MISRA rule 4.1 violations,
+    if the code appears in a "#if 0" region.
+    NMUR, 2/11/10
+
+*   We were reporting the modification of a member of a local
+    structure object as possibly modifying non-local data when such
+    non-locality was not possible.
+    IIMA, 2/12/10
+
+*   When -p and -summary were used (but without an output filename to
+    -summary), the summary output would appear as part of the preprocessed
+    source code (and not as part of the diagnostic output, which in -p
+    mode goes to stderr or to a file specified by -oe(filename).)
+    GSRN-PP-100203-3
+    SIPO, 2/15/10
+
+*   Update to au-misra2.lnt;  several rules labeled as "not currently
+    supported" have been recognized as being supported or as "not
+    statically checkable".
+    RMRI, 2/18/10
+
+*   We now report on the syntax error of duplicate type-specifiers
+    such as:
+        signed signed int i;
+    For this change we have introduced a new message, #29: Duplicated
+    type-specifier.
+    DTOL, 2/22/10
+
+*   When a variable with internal linkage and namespace scope appeared in
+    a pre-compiled header, and when the primary source file used to
+    generate the .lph was subsequently used in a Lint run for the
+    absorption of the same .lph file, undeserved Errors could result.
+    Example:
+        t.h (PCH):
+            namespace N { static int M; }
+        t.cpp:
+            #include "t.h"
+            int S = N::M; // Undeserved Error 1075 here after PCH
+                          // absorption
+    SNTP, 2/23/10
+
+*   We now report on violations of MISRA C 2004 rule #17.4 and MISRA
+    C++ rule #5-0-15, relating to pointer arithmetic.
+    MPPA, 2/23/10
+
+*   We now report on violations of MISRA C 2004 rule #16.9 and MISRA
+    C++ rule #8-4-4, relating to the use of function identifiers.
+    FIBI, 2/24/10
+
+*   We now report on violations of MISRA C 2004 rule #11.5 and MISRA
+    C++ rule #5-2-5, relating to casting away const or volatile
+    qualifications.
+    CACV, 2/24/10
+
+*   When a primary source file's name was given to Lint with a leading
+    './', and when that file contained one direct #include of a header
+    file and one indirect #include for the same header file named with
+    '../', we could erroneously see the two #includes as referring to two
+    different header files; this would lead us to incorrectly evaluate
+    '#pragma once' and undeserved errors could ensue.  (This was not seen
+    on POSIX, where Lint uses device and serial numbers indicated by
+    stat() to determine file identity instead of normalized path names.)
+    Example:
+        Directory structure:
+            s/x
+            s/x/a.lnt
+            s/x/b.h
+            s/x/t.cpp
+            s/y
+            s/y/a.h
+        s/x/a.lnt:
+            +pragma(once,once)
+            +fdi
+            ./t.cpp
+        s/x/t.cpp:
+            #include "b.h"
+            #include "../y/a.h"
+        s/x/b.h:
+            #pragma once
+            #include "../y/a.h"
+        s/y/a.h:
+            #pragma once
+            struct X {  int x; };  // Undeserved Error 39 (redefinition)
+        Invocation:
+            lint-nt.exe -i"s" a.lnt
+    DCFN, 2/25/10
+
+*   We now report on violations of MISRA C 2004 rule #8.7 and MISRA
+    C 1998 rule #22, reporting when objects with static storage are
+    accessed by only one function and, therefore, can be moved to block
+    scope.
+    SFAS, 3/15/10
+
+*   The letter 'i' (or 'I') when used as an integral suffix received
+    no warning.
+    WPIS, 3/16/10
+
+*   We now report on violations of MISRA C 2004 rule #12.13 and MISRA
+    C++ rule #5-2-10 relating to increment and decrement operators.
+    IDOO, 3/17/10
+
+*   We now report on violations of MISRA C 2004 rules #6.1 and #6.2
+    and MISRA C++ rules #5-0-11 and #5-0-12 relating to the type of char.
+    PCCO, 3/17/10
+
+*   We were waiting too long to instantiate a template and giving a
+    false error #1058 when attempting to initialize a reference to a
+    base class with a dereference pointer of a derived
+    instantiated-template class.
+    CYNE, 3/19/10
+
+*   class names are normally represented in diagnostic messages by
+    simply their name and without a class key.  That is class X would be
+    represented as 'X' and not by 'class X'.  However, if the class
+    is defined with the keyword 'struct' and if it is a POD (Plain Old
+    Data) object it is represented with the class key 'struct'.  Thus
+    "struct A { int a, b; }"  is represented as "struct A" and not "A".
+    This is a slight change from earlier when the criterion was
+    aggregate rather than POD.  The reason for the change was to make the
+    POD property more apparent as only these can be arguments to functions
+    such as memcpy().
+    CPSN, 3/22/10
+
+*   We adjusted our calculation of the MISRA underlying type for
+    character literals based on new information from MISRA.
+    CMUT, 4/5/10
+
+*   We now warn about the use of %a or %A when in C90 mode or in C++
+    (prior to 2010) mode.
+    PAFC, 4/6/10
+
+*   We enhanced our support for detecting violations of MISRA C 2004
+    rule #6.1, MISRA C++ rule #4-5-3, and MISRA C++ rule #5-0-11 to
+    include relational and arithmetic operation violations.
+    MPCO, 4/7/10
+
+*   We now detect violations of MISRA 1998 rule #27, MISRA 2004 rule
+    #8.8 and MISRA C++ rule #3-2-3 relating to the declaration of
+    external objects.
+    EDOF, 4/7/10
+
+*   We were not allowing an rvalue to be thrown to a reference to non-const.
+    As the standard says, the rvalue is used to initialize an
+    exception object which is permitted to be passed to a reference
+    to non-const.
+    CPNR, 4/9/10
+
+*   In a declaration that names a function template specialization,
+    access-checking would be applied to the declarator-id, and an
+    undeserved diagnostic would result.  Example:
+        class  A { template<int I> void f(); };
+        template<int I> void A::f() {}
+        template<> void A::f<1>() {} // Undeserved Error 1060 here.
+    ACDN, 4/9/10
+
+*   The initializer of a static data member of a class template could
+    elicit an undeserved type-mismatch error.  Example:
+        struct A{};
+        template <class T> struct X { static A n; };
+        template <typename T> A X<T>::n =
+            T::f(); // Undeserved Error 64 here
+    ITSD, 4/9/10
+
+*   We corrected an issue involving non-working -elibmacro() options
+    for systems which use a '.' character as an alternative wildcard.
+    UWCP, 4/16/10
+
+*   We were issuing an undeserved MISRA C++ Rule 11-0-1 violation
+    by reporting on non-private data members that were static and
+    also typedef's and enum's.  The rule should only apply to non-static
+    data members.
+    TDNP, 4/22/10
+
+*   Our emulation of Microsoft's treatment of __if_exists was not
+    sufficient to treat Boost.Typeof as the Microsoft compiler does.  In
+    particular, we would always regard a template specialization as
+    "existing", since a specialization otherwise springs into existence
+    when it is named for the first time.  But not so in the context of the
+    condition of __if_exists.  Example:
+        //lint -cmsc -w1 +e1501
+        template<class T>struct X{};
+        struct Y { __if_exists(X<int>){void q;/*MSVC: ok*/} };
+        typedef X<int> A;
+        struct Z { __if_exists(X<int>){void q;/*MSVC: error*/} };
+    GSRN-TM-100301-1
+    IETS, 4/27/10
+
+*   We now detect violations of MISRA 1998 rule #115, MISRA 2004 rule
+    #20.2, and MISRA C++ rule 17-0-2 relating to the reuse of standard
+    library macros and objects.
+    RRRM, 5/3/10
+
+*   We enhanced support for Borland's __property extension so as to
+    prevent complaints about missing 'this' objects within the body of
+    the __property declaration.
+    AOPB, 5/4/10
+
+*   For a case where a class template was used before its first
+    declaration, and then declared, and then used again, as in:
+        template<class T> A<T> b;
+        template<class> class A;
+        typedef A<char> C;
+     we issued:
+        Error 200: Internal Error, subcode=2033
+    ... which is Lint's way of claiming that Lint has a bug, and the claim
+    arose because when Lint tried to determine whether the specialization
+    would be instantiated, it found that its own internal data about the
+    template was ill-formed.  But that's really because the code is
+    ill-formed, so we should have a Recovery Error instead of an Internal
+    Error.
+    GSRN-TM-100428-1
+    RTLT, 5/6/10
+
+*   We now highlight violations of MISRA 1998 rule #36, MISRA 2004
+    rule #12.6, MISRA C++ rule 4-5-1, and MISRA C++ rule 5-3-1 relating
+    to the use of Boolean expressions.
+    SUBE, 5/7/10
+
+*   We now detect violations of MISRA C 1998 rule #34, MISRA C 2004,
+    rule #12.5, and MISRA C++ rule #5-2-1 relating to the operands of
+    logical operators.
+    PLOO, 5/7/10
+
+*   -indirect( xxx.lnt ) could cause a crash if used within a lint
+    comment within a template.
+    IOWT, 5/13/10
+
+*   (Version 1X) Introduced support for parsing a trailing-return-type.
+    NFDS, 5/14/10
+
+*   We now report on violations of MISRA C 1998 rule #74, MISRA C
+    2004 rule #16.4, and MISRA C++ rule #8-4-2 relating to identical
+    identifiers in the declaration and definition of a function.
+    IIDD, 05/18/10
+
+*   We now detect violations of MISRA C 2004 requirement #10.6, and
+    MISRA C++ requirement #2-13-3 relating to the use of the 'U' suffix.
+    SUUC, 05/18/10
+
+*   We now report on violations of MISRA C 1998 rule #16, MISRA C
+    2004 rule #12.12, and MISRA C++ rule #3-9-3 with regards to
+    accessing the underlying bit representation of floating point
+    values.
+    FPBU, 05/21/10
+
+*   Header files found by searching the directory of the including file
+    (using, of course, quotes as opposed to angle brackets on
+    the #include line) often had their names displayed using the
+    full file name (complete path name) even though the +ffn flag
+    was not set on. Display of such header file names is now in accord
+    with the display of names found using a directory specified with
+    a -i directive.
+    SFNA, 6/2/10
+
+*   In the following example the explicit constructor for B(int)
+    was not ignored in the following ocde:
+        struct B { explicit B(int); };
+        struct A
+            {
+            A( int, ... );          // 1
+            A( const B&, bool );    // 2
+            };
+        void f()
+            { A( 1, 42 ); }
+    This produced an ambiguous call message.
+    ECNI, 6/2/10
+
+*   A template-argument naming a C++/CLI pointer to garbage-collected
+    storage, where the name of the pointee type is undeclared, would
+    elicit an infinite loop.  Example:
+        //lint -cmsc(clr)
+        template<class T> void f();
+        template<>        void f<A^>();
+        //GSRN-HP-100602-1
+    CPUC, 6/4/10
+
+*   It was possible to produce output lines with unusually large widths
+    in spite of the fact that there was a nominal bound on their width
+    (-width(M)) as is the case by default.  This was because we would
+    wait for a blank before breaking.  Some template id's could go
+    on for thousands of characters before that happened, however.
+    We now force a line break after exceeding M+60 characters, and
+    sooner if a convenient line-end character has been found.
+    IMOW, 6/8/10
+
+*   By default, we now limit MISRA C messages to C modules and MISRA
+    C++ messages to C++ modules.  This presumption, however, may be
+    altered with the use of either or both of two new arguments to the
+    -misra() option:
+        CinC++: to activate MISRA C messages for C++ modules
+        C++inC: to activate MISRA C++ messages for C modules
+    EMAO, 06/15/10
+
+*   We were inadvertently considering undefined macros mentioned in a
+    bypassed or pre-compiled header as defined.
+    AUML, 06/16/10
+
+*   We now provide rudimentary support for the MS .vcxproj file.
+    The usage follows along the line of the .vcproj file.
+    VCXP, 6/17/10
+
+*   Added the ability to process MS .sln files which produces a
+    batch script consisting of a sequence of lint executions.
+    PMSF, 6/23/10
+
+*   (Version 1X) We were issuing an ambiguity message when overloaded
+    functions differed only by R-value vs. ordinary reference. E.g.
+        void g( const A & );
+        void g(       A && );
+        ...
+        g( A() );       // undeserved 1023
+    DRRL, 7/8/10
+
+*   An undeserved 1023 (overload ambiguity) was being issued when
+    using constructors to convert arguments by not taking into account
+    a secondary standard conversion from the class to the parameter.
+    ORIC, 7/9/10
+
+*   In code compiled against MSVC, a use of __uuidof() (whether implicit,
+    as in an implicit use of a default argument to a template parameter,
+    or explicit) that appears in the /condition/ of if(), while(), for(),
+    etc. could elicit an undeserved parse error message.
+    UUTA, 7/9/10
+
+*   In code compiled against MSVC, Lint would see __int32 as a synonym for
+    'long'; we now see it as a synonym for 'int' (as Microsoft does in
+    both 32-bit and 64-bit modes).
+    WU32, 7/9/10
+
+*   (Version 1X) A move constructor ( e.g., A( A&& ); ) was being
+    flagged as a 2nd copy constructor.
+    RTMC, 7/12/10
+
+
+*************** Version 9.00d  -- December 7, 2009 ***************
+
+*   (C++ Version 0X) Implemented support for explicitly defaulted
+    special member functions.
+    DAUF, 6/11/09
+
+*   When attempting to declare a namespace/block scope function
+    multiple times with default arguments, Lint would crash.
+    DAPC, 6/15/09
+
+*   We were not properly overloading function templates on return type
+    alone.  (This behavior is necessary to support SFINAE tactics like
+    those involving boost::enable_if.)
+    TRTO, 6/17/09
+
+*   (C++ Version 0X) implemented 'explicit' conversion functions as
+    per document N2437
+    IICO, 6/18/09
+
+*   A recent modification revealed a slight logic error involving
+    default arguments, resulting in an internal error.  We have
+    corrected this error.
+    DAIE, 6/18/09
+
+*   (C++ Version 0X) augmented IICO to add support for explicit
+    conversion functions to be implicitly used for contexts in which
+    there is a contextual conversion to Bool
+    RBCC, 6/23/09
+
+*   We were not applying the -size() option to function parameters.
+    SSAP, 6/23/09
+
+*   Our declaration/expression ambiguity resolution in C++ mode was
+    incorrectly recognizing some expressions as declarations.  Example:
+       struct  A { A(int); A & operator<<( int ); };
+       void f(int n) {
+           A(n) << 42; // Lint 9.00c gives an undeserved Error 18 here.
+       }
+    ESAD, 6/23/09
+
+*   Given:
+        struct A{enum{e};};
+    ... seen on a given line in a file t1.cpp and in a different location
+    in t2.cpp (and not in a header file), and given a separate .LOB file
+    generated from each of those sources, a crash would result when
+    reading the LOBs.
+    CDLA, 6/26/09
+
+*   A while clause that resembles a declaration, but then contains
+    a syntax error resulting in nothing plausible as an initializer,
+    could result in a crash
+    SECC, 8/4/09
+
+*   We were not previously considering the cv qualification of
+    implicitly invoked operator conversion functions.  This would
+    have made it impossible to discriminate between:
+        operator const int*() const;
+        operator int *();
+    WAFM, 8/16/09
+
+*   The implicit conversion of operands for built-in functions was
+    not being reckoned properly during the overload resolution phase.
+    There was a tendency to regard sub-integers as not arithmetic.
+    Thus the predicate:
+        d != 0
+    where d was of type D was receiving an undeserved ambiguity
+    message when class D had operator conversion functions:
+        operator A*();
+        operator bool();
+    This should select operator bool().
+    AIBO, 8/28/09
+
+*   During unqualified name lookup from within a member function of a
+    nested class, there were circumstances in which we would fail to find
+    members of an enclosing class.
+    SSUM, 8/31/09
+
+*   If a file was initially used as a header file and then as a source
+    file, the -header() option failed to apply to it.  Example:
+        // files t2.cpp, t3.cpp and a.hpp are all empty; t1.cpp contains
+        // only:
+        #include "t2.cpp"
+        // Invocation:
+        // lint "-header(a.hpp)" -w1 -vf t1.cpp t2.cpp t3.cpp
+    In this case, a.hpp was not included at the top of the translation
+    unit for t2.cpp.
+    MHOI, 9/8/09
+
+*   Within a .vcproj file, we were not converting "&quot;" into a
+    double quote for a PreprocessorDefinitions string.
+    QWVD, 9/9/09
+
+*   We were confusing dimensionless arrays with zero-length arrays
+    (disallowed by ISO C/ISO C++ but allowed by some compilers because of
+    uses in legacy code, e.g. in the implementation of the FreeBSD system
+    call interface, where zero-length arrays are used as part of an
+    ancient hack to force alignments).  This led to undesired instances of
+    Error 157.
+    ZDMN, 9/10/09
+
+*   We added the basic architecture needed to report the number of
+    messages from each category given during the processing of each
+    function.
+    PFMC, 9/15/09
+
+*   When relational operators are used as 2nd arguments to logical
+    AND (&&) or logical OR (||) in the control clause of a while
+    or for statement we could issue an undeserved 685 (Relational
+    operator always evaluates to true).
+    ROMO, 9/17/09
+
+*   An internal error 200, though designed to include a subcode,
+    was lacking same.
+    IELS, 9/17/09
+
+*   Suppose we have a strong type (call it X) whose underlying type is an
+    ordinary class type (call it Q).  While doing strong type-checking for
+    an assignment from X to Q, we did not recognize the relationship.
+    Example:
+        //lint -strong(AJX)
+        struct A { void f() {} };
+        typedef A X;
+        void g( X t ) {
+            t.f(); // undesired Warning 639 here (for the initialization
+            // of the implicit object parameter of A::f()).
+        }
+    MAES, 9/17/09
+
+*   (C++ Version 0X) The diagnostic about inconsistent deduced types for
+    the 'auto' type-specifier was not being issued.
+    DDTN, 9/18/09
+
+*   An option of the form -dname=... could create difficulty if the
+    ... contained an unbalanced left brace or left paren.  Thus
+    -dLB={ did not work as expected as it was capable of gobbling up
+    neighboring text (in a .lnt file).  A quoted form such as
+    -d"LB={" would always work.
+    RMDO, 9/30/09
+
+*   We were issuing some undesired diagnostics involving
+    __property members (a feature of the C++ Builder compiler).  The
+    undesirability is a result of Lint's current interpretation of each
+    __property member as an ordinary non-static data member.  That
+    interpretation has not changed, but the number of undesired
+    diagnostics about property members has been significantly reduced.
+    Also, we were issuing undeserved diagnostics about 'read' and 'write'
+    functions not being referenced.
+    QBPS, 9/30/09
+
+*   Our handling of overloaded operators -> did not take into account the
+    possibility of a cycle; e.g.:
+        struct B;
+        struct A { struct B& operator->(); };
+        struct B { struct A& operator->(); int n; };
+        int  f( A & p ) { p->g(); } // 9.00c2 loops infinitely here
+    This, coupled with a bug in the name lookup for overloaded operators
+    '->', led to an infinite loop in:
+        struct  X { void g(); };
+        struct  B {
+            X* operator -> () const;
+        };
+        struct  A {
+            B m;
+            B& operator -> ();
+            void h() {
+                m->g(); // 9.00c2 loops infinitely here
+            }
+        };
+    Also, certain other class member operators were inappropriately found
+    by name lookup during the search for non-member functions (specified
+    in [over.match.oper] in ISO C++); this led to undeserved errors when
+    those operators competed in overload resolution.  Example:
+        struct B { B& operator/=(const double& r); };
+        struct A {
+            B   v;
+            A& operator/= (const double& r) {
+                v /= r; // Spurious 1023 here
+                return *this;
+            }
+        };
+    IUOA, 10/7/09
+
+*   Changed error message for fpatch.c when unable to open for
+    writing.
+    FUOW, 10/9/09
+
+*   In Microsoft emulation mode (for VC++6), the processing of an explicit
+    specialization requires a special behavior where the names of the
+    primary template's template parameters are placed in scope (as if each
+    parameter was a typedef name for the corresponding template argument
+    of the specialization).  But we were not prepared for an explicit
+    specialization to appear inside a class template definition, and this
+    case could cause a crash to occur later in processing.  Example:
+        template<typename T> struct G {
+            template <typename U> struct H {};
+            template <>  // Ill-formed by ISO C++;
+                         // Ok by all versions of MSVC++ to date.
+                struct H<int> {};
+        };
+    NEEF, 10/29/09
+
+*   When the value of a pre-increment or pre-decrement of a char is
+    passed to a function, the overload treatment of the expression
+    assumed the type to be an int.  The correct type is, of course,
+    a char.
+    TPID, 11/4/09
+
+*   Our use of template function specializations as candidates
+    for overloading needs to be restricted to those resulting from
+    template matches of the current argument list.
+    Explicit specializations and specializations resulting implicitly
+    from prior argument lists need not and should not be considered.
+    ICPC, 11/5/09
+
+*   MAES introduced a regression:  an undeserved Error 138 would be
+    issued on a typedef where the underlying type is a class type whose
+    unqualified name had been used to declare a different type.  Example:
+        struct A {};
+        struct C { struct A : ::A {}; };
+        typedef C::A B;  // Undeserved Error 138 here
+    USLM, 11/12/09
+
+*   USLM introduced a regression where a typedef of a name previously
+    given in a -strong() option could result in a crash if the underlying
+    type was a class that had not been declared before the typedef.
+    Example:
+        //lint -strong(AJX,V)
+        typedef struct A V;
+    ECMI, 11/16/09
+
+*   When the argument to delete is a class we gave an undeserved 1043.
+    The standard allows an object of class type to follow delete
+    as long as it has a single non-explicit conversion function to a
+    pointer to object type.
+    ADIC, 11/18/09
+
+*   Pre-compiled headers were not working properly with C++ using the
+    co-msc80.lnt or co-msc90.lnt compiler options files.
+    The problem involved the typeinfo header inclusion.
+    PHMH, 11/30/09
+
+
+*************** Version 9.00c  -- June 15, 2009 ***************
+
+*   A function given the cleanup semantic as in:
+         -sem( X::f, cleanup )
+    when called by a non-destructor did not sufficiently clean up
+    the value state of pointers to avoid issuing an undeserved
+    Warning 423 (Creation of memory leak).
+    GSRN-AL-081219-1
+    CCFI, 12/22/08
+
+*   (C++ Version 0X) Implemented Forward Declaration of enumerations
+    FDOE, 12/30/08
+
+*   We were issuing an Internal Error 1275 in Boost metaprogramming
+    headers.
+    UCTA, 1/5/09
+
+*   We could crash with the option +fab enabled while parsing iostream
+    that ships with Visual Studio 2008.
+    Related: We have removed instances of +fab from Microsoft support
+    files, since the extension it mimics does not appear to be supported
+    by recent versions of the Visual C++ compiler; also, proper behavior
+    now depends on its absence.
+    RGAB, 1/5/09
+
+*   The following construct resulted in undesired errors when seen
+    in second and subsequent modules:
+        typedef long M;
+        struct X { M M; };
+    This code is technically ill-formed but is seen in popular library code.
+    CPMH, 1/5/09
+
+*   Two -atomic(...) options in a .lnt file would result in a crash
+    at the first module.
+    AOIC, 2/18/09
+
+*   When processing GCC headers without a proper configuration (i.e.
+    without a macro definition for __attribute__ supplied in co-gcc.lnt),
+    a crash could occur.
+    GFTM, 2/19/08
+
+*   (C++ Version 0X) Added support for R-value references.
+    IRVR, 2/16/09
+
+*   In the definition of a tagless class inside a user-defined namespace
+    where a function template had previously been declared, an internal
+    error could result.
+    ARGT, 2/19/08
+
+*   At the point where a conversion occurs in the passing of a non-type
+    template argument to a non-type template parameter of type 'void*',
+    Lint would issue Internal Error 1285.
+    ZPNT, 2/19/08
+
+*   We now support functors stemming from conversion functions that
+    return pointers to functions (or the equivalent).  Previously we
+    only supported "operator()" as the basis of a functor.
+    PFAF, 3/10/09
+
+*   We were not implementing a form of direct reference binding that
+    involved use of a conversion function.  For example:
+        struct A { operator int&(); operator const int&(); } a;
+        int f( int& );
+        int k = f( a );
+    should select, from the pair of functions, the most appropriate one
+    using overload resolution.  We were previously issuing 1037
+    (ambiguous reference) for this case.
+    DRBC, 3/31/09
+
+*   An undeserved message (456) could be issued from within a member
+    function in which a mutex lock (semantic 'thread_lock') was set
+    but not released.
+    BLMM, 4/1/09
+
+*   (C++ Version 0X) Revised R-value references so as not to bind directly
+    with lvalues.
+    RRBL, 4/2/09
+
+*   For the purpose of overload resolution we were placing a const
+    qualifier on rvalue arguments to a function.  This practice was
+    found to be no longer required and not particularly accurate
+    for the purpose of type deduction (with function templates)
+    and so has been discontinued.
+    NNAT, 4/20/09
+
+*   A crash could occur with ill-formed template code
+    IFTC, 4/23/09
+
+*   (C++ Version 0X) The new character types (char16_t and char32_t) have
+    been implemented (N2249).
+    INCT
+
+*   (C++ Version 0X) Implemented the L-value reference deduction (for when
+    a function parameter has the type T&&) and reference collapsing rules.
+    DLVR, 4/22/09
+
+*   (C++ Version 0X) Implemented underlying types for enums.
+    IUTE, 4/22/09
+
+*   (C++ Version 0X) Implemented initial support for deleted functions.
+    Example:
+            void f( char* );
+            void f( void ) = delete;
+            void g( char* s ) {
+                f( s ); // ok
+                f(); // Error: Use of deleted function 'f(void)'
+            }
+    N2346, DELF, 4/29/09
+
+*   (C++ Version 0X) disembodied non-static data members are now allowed
+    as arguments to sizeof (and friends).  (N2253)
+    SNMT, 4/30/09
+
+*   (C++ Version 0X) The decltype feature has been implemented.
+    ATDK, 5/6/09
+
+*   We were failing to disambiguate the following pair of conversion
+    functions for an implicit conversion from B to some type T.
+        struct B { operator T(); operator T() const; };
+    In particular, we were issuing an undeserved report of an ambiguous
+    reference to a conversion function when using the Boost library.
+    CFSB, 5/15/09
+
+*   (C++ Version 0X) the nullptr type (N2431) was added.
+    NDAI, 5/21/09
+
+*   When a friend declaration named a specialization and the template-id
+    named more than one template argument, undeserved Errors could result.
+    Example:
+        template <class T,class U> struct A;
+        template <class T,class U> bool f();
+        template <class T,class U> struct A {
+            friend bool f<T,U>(); // 9.00b3: Undeserved Error 151 here
+        };
+    (This was reduced from '#include <boost/unordered_map.hpp>'.)
+    PASS, 05/01/09
+
+*   Resolved an issue in our handling of an initializer in a
+    /condition/ [see stmt.select in ISO C++]; e.g.:
+        struct A { operator bool() const ; };
+        void f() {
+            if ( const A& b = A() ) /* OK */ {}
+        }
+    ...which in version 9.00b3 elicited the undeserved Errors 1072 and 111.
+    HICO, 05/12/09
+
+*   Added support for the 'alignof' keyword for C++0x.  A synonym for this
+    keyword (spelled '__alignof') is now also enabled in Microsoft
+    compatibility mode (i.e. when -cmsc is specified).  The '__alignof'
+    variant spelling may be used to enable this keyword more generally, as
+    in -rw_asgn(__alignof__,__alignof)
+    ALGN, 05/15/09
+
+*   Added support for the special macro __COUNTER__ (implemented in MSVC++
+    version 13.00 and up, GCC 4.3 and up and possibly other compilers).
+    The behavior is as specified in Microsoft's documentation:
+        "[__COUNTER__] Expands to an integer starting with 0 and
+        incrementing by 1 every time it is used in a compilation unit.
+        __COUNTER__ remembers its state when using precompiled headers. If
+        the last __COUNTER__ value was 4 after building a precompiled
+        header (PCH), it will start with 5 on each PCH use."
+    Our spelling of the macro is '__lint__COUNTER__'; so e.g. to enable
+    '__COUNTER__' when linting code compiled against MSVC++, one can add:
+        -d"__COUNTER__=__lint__COUNTER__"
+    ...to one's Lint configuration.
+    MSCN, 05/20/09
+
+*   We corrected a slight incompleteness of +estring behavior as
+    compared with the Lint documentation.  For example, options of the
+    form +estring(958,member) would not actually activate message 958
+    for a message parameterized with the word 'member'.  Other message
+    numbers were being handled correctly.
+    ESAM, 6/4/09
+
+*   It was not possible to activate msg 970 (Use of modifier or type
+    'Name' outside of a typedef) for a particular modifier or type.
+    Now, for example, +esym(970,long) will behave properly.
+    ENWF, 6/4/09
+
+*   In Microsoft emulation mode (for VC++6), the processing of an explicit
+    specialization requires a special behavior where the names of the
+    primary template's template parameters are placed in scope.  There
+    were two issues with our emulation:
+        1) the underlying types of the injected typedef names were incorrect
+        2) we were doing the emulation for all versions of the Microsoft
+           compiler (but only VC++6 has this extension)
+    Both issues are now corrected.
+    CVGA, 06/09/09
+
+*   An attempt to set the built-in length of size_t to long-long (via
+    the pair of options +fzl ++fzl) resulted in undeserved 516 Warnings).
+    AONC, 6/8/09
+
+*   It was not possible to set a size (using -s...) after setting
+    the +fzl (sizeof is long) flag.
+    RPCN, 6/12/09
+
+
+*************** Version 9.00b  -- December 18, 2008 ***************
+
+*   We now issue the Misra message that indicates that there is a signed
+    (named) bit field of length less than 2.
+
+*   (C++0x) Added support for scoped enumerations.
+
+*   If program_info() were used with multiple passes there would be
+    a repeat of local variables.
+
+*   An illegal access could occur when a Microsoft .vcproj file is
+    processed by FlexeLint on a Unix-like platform
+
+*   Compiling our shrouded (FlexeLint) code results in a warning
+    about an implied conversion from char** to char const * const *.
+    This harmless conversion is allowed in C++ but not in C.
+
+*   Detection of Misra C++ rule violation (abstract class contains
+    user-defined copy-assignment-operator with public access)
+    for Elective Note 1960.
+
+*   Detection of Misra C++ rule 15-1-2 violation (throw NULL)
+    was added to Elective Note 1960.
+
+*   Detection of Misra C++ rule 11-0-1 violation (non-private data
+    members in non-POD types) was added to Elective Note 1960.
+
+*   We were crashing when a too-large string was being read in from
+    a pre-compiled header (.lph file).
+
+*   Functions defined in libraries which by default are not processed
+    (would need the +flf flag) were regarded as pure; this led to false
+    positives (Warning 522).  They are now regarded as impure.
+
+*   We were not complaining (Elective Note 1960 and Misra C++ required
+    rule) that a void-returning function (g) has no side-effects when
+    it only calls a template function (h) that has no side-effects.
+    Example:
+      template< class T > void h() {}
+      void g() { h<int>(); }
+    Here h<int> has no side effects and for that reason we should
+    deduce that g has no side-effects which we failed to do.
+
+*   We were issuing Info 1795 when in unit check (-u) mode.  This message
+    is now suppressed for unit check.
+
+*   When +source was combined with html output (such as using env-html.lnt)
+    source characters involving < > and & were not properly escaped.
+
+*   Using xml or html output modes we now transform quotes
+    into an escaped version of the quote, i.e. &quot; when such quotes
+    appear within variable portions of a message (such as %m in a
+    -format option).
+
+*   We were issuing an Elective Note 963 for generated members of a
+    struct.  This was not desirable because the user has no control
+    over the style of declaration chosen.
+
+*   We were issuing (fatal) Error 328 when a -header option caused to
+    have included a sub header of a pre-compiled header.  The same
+    effect could be seen when instead of designating the header as
+    pre-compiled it was designated as bypass.
+
+*   The option -sem( operator=, ... ) was not treated properly.
+    If fact if there was an '=' character in the name of the function
+    difficulties ensued.
+
+*   An explicit template instantiation saved in a pre-compiled header
+    was not being restored properly and the restoration resulted
+    in Internal Error 200, subcode 2032
+
+*   Thread semantics were sometimes not picked up for static functions
+
+*   Due to an issue with our internal formation of expression trees
+    involving class member operator functions, some -sem() options would
+    not take effect when applied to said functions.
+
+*   Added the following semantic to lib-stl.lnt:
+      -sem(std::auto_ptr::auto_ptr,custodial(1))
+    which indicates that the auto_ptr constructor takes custody of the
+    pointer.
+
+*   The option --source was added; it can be used to turn off the
+    echoing of source lines.
+
+*   In the context of a template definition, a call to a function template
+    using an explicit template argument of dependent type could result in
+    infinite recursion.
+
+*   In /clr mode the Microsoft Compiler (Vers 2005+) allows 'public'
+    to precede a class or enum definition.  We now accept this keyword
+    when -cmsc(clr) is given.
+
+*   A problem with PCH headers would result in the set of overrides
+    for a function being mangled.  This resulted in one case in an
+    Error 328.
+
+*   Functions defined within a PCH header were omitted from the set
+    of functions considered for modifying static values.  This could
+    result in Warning irregularities for static variables.
+
+*   We were issuing a false message (Info 845 -- is certain to evaluate
+    to 0) for an expression involving a class data member where said
+    member was involved in either a || or an && expression.
+
+*   Our method of forming class template specialization types differed
+    slightly between template-id parsing and template argument
+    substitution for a dependent specialization type; as a result in some
+    cases we would issue Internal Error 1242 during template argument
+    substitution in a call to a function template.
+
+*   Although we previously warned of returning an auto variable via
+    a reference return type, we did not catch the case of returning
+    a reference to an auto variable which is equally aggregious.
+
+*   In C++, in the declaration of a member of a tagless struct, a use of
+    another member of the same tagless struct could yield Internal Error
+    1229.
+
+*   The bypass options were missing from the help information
+
+*   A crash could occur when lob files were used in multiple passes
+
+*   We were issuing an undeserved 587 (Predicate can be pre-determined)
+    in some cases involving negation and unsigned variables.  e.g
+    if( u - 1 == 0 ) ...   // undeserved 587
+
+*   we were issuing a Warning 443 (for clause irregularity) when the
+    loop variable initialization was buried in a larger expression as
+    in:  for( k = i = 0; i < 100; i++ ) {}
+    The consensus seemed to be that this was not sufficiently irregular
+    to warrant the message.
+
+*   We were issuing an unjustified internal error (1261) when either
+    a Boolean was passed to one of the scanf family of functions or
+    when a %c format was used in connection with the scanf family.
+    GSRN-HP-081211-1
+
+*   We were issuing an undeserved Warning (1416 -- an uninitialized
+    reference is being used to initialize a reference)
+    for the following:
+      struct S { int const &m; S( S const &s ) : m( s.m ) {}  };
+
+*   We were ignoring the inference-yielding properties of a predicate
+    that was always true in the false branch of an if.  E.g.
+      int n = 100;
+      if( n > 50 ) return;
+    we still "think" n is 100 which could lead to false conclusions.
+
+*   When using bypass headers, a function call involving two (overloaded)
+    function candidates from two different namespaces can result in the
+    wrong function being selected.
